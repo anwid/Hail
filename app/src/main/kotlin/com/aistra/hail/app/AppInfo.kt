@@ -15,12 +15,18 @@ class AppInfo(
 
     val identity = AppIdentity(packageName, userId)
     val key: String get() = identity.key
+    var tagId: Int
+        get() = tagIdList.firstOrNull() ?: 0
+        set(value) {
+            tagIdList.clear()
+            tagIdList.add(value)
+        }
     val applicationInfo: ApplicationInfo? get() = HPackages.getApplicationInfoOrNull(packageName, userId = userId)
     val name get() = applicationInfo?.loadLabel(app.packageManager) ?: packageName
     val state
         get() = when {
             applicationInfo == null -> State.NOT_FOUND
-            AppManager.isAppFrozen(packageName, userId) -> State.FROZEN
+            AppManager.isAppFrozen(packageName, userId, HailData.getWorkingModeForApp(this)) -> State.FROZEN
             else -> State.UNFROZEN
         }
 

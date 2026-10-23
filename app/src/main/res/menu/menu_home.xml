@@ -4,6 +4,7 @@
     <item
             android:id="@+id/action_sort_done"
             android:title="@string/action_sort_done"
+            android:visible="false"
             app:showAsAction="always"/>
     <item
             android:id="@+id/action_home_sort"
@@ -51,6 +52,7 @@
                 app:showAsAction="never"/>
     </group>
     <item
+            android:id="@+id/menu_import"
             android:title="@string/action_import_app"
             app:showAsAction="never">
         <menu>
@@ -67,6 +69,7 @@
         </menu>
     </item>
     <item
+            android:id="@+id/menu_export"
             android:title="@string/action_export_clipboard"
             app:showAsAction="never">
         <menu>

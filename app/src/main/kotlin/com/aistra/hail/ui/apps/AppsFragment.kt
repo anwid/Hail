@@ -7,8 +7,7 @@ import android.widget.CompoundButton
 import android.widget.EditText
 import androidx.activity.result.contract.ActivityResultContracts.CreateDocument
 import androidx.appcompat.widget.SearchView
-import androidx.core.view.MenuHost
-import androidx.core.view.MenuProvider
+import com.aistra.hail.ui.main.ActivityMenuHandler
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
@@ -33,7 +32,7 @@ import kotlinx.coroutines.withContext
 import java.io.FileInputStream
 
 class AppsFragment : MainFragment(), AppsAdapter.OnItemClickListener, AppsAdapter.OnItemCheckedChangeListener,
-    MenuProvider {
+    ActivityMenuHandler {
 
     private val model: AppsViewModel by viewModels()
 
@@ -80,8 +79,6 @@ class AppsFragment : MainFragment(), AppsAdapter.OnItemClickListener, AppsAdapte
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?
     ): View {
-        val menuHost = requireActivity() as MenuHost
-        menuHost.addMenuProvider(this, viewLifecycleOwner, Lifecycle.State.RESUMED)
         _binding = FragmentAppsBinding.inflate(inflater, container, false)
         appsAdapter = AppsAdapter().apply {
             onItemClickListener = this@AppsFragment
@@ -92,7 +89,6 @@ class AppsFragment : MainFragment(), AppsAdapter.OnItemClickListener, AppsAdapte
             applyDefaultInsetter { marginRelative(isRtl, start = !isLandscape, end = true) }
         }
         binding.recyclerView.apply {
-            activity.appbar.setLiftOnScrollTargetView(this)
             layoutManager = GridLayoutManager(activity, resources.getInteger(R.integer.apps_span))
             adapter = appsAdapter
             applyDefaultInsetter { paddingRelative(isRtl, bottom = isLandscape) }
@@ -206,12 +202,12 @@ class AppsFragment : MainFragment(), AppsAdapter.OnItemClickListener, AppsAdapte
         buttonView.isChecked = HailData.isChecked(packageName, userId)
     }
 
-    override fun onCreateMenu(menu: Menu, inflater: MenuInflater) {
-        inflater.inflate(R.menu.menu_apps, menu)
-        val searchView = menu.findItem(R.id.action_search).actionView as SearchView
+    override fun onSetupMenu(menu: Menu) {
+        val searchItem = menu.findItem(R.id.action_search) ?: return
+        val searchView = searchItem.actionView as? SearchView ?: return
         if (HailData.nineKeySearch) {
             val editText = searchView.findViewById<EditText>(androidx.appcompat.R.id.search_src_text)
-            editText.inputType = InputType.TYPE_CLASS_PHONE
+            editText?.inputType = InputType.TYPE_CLASS_PHONE
         }
         searchView.setOnQueryTextListener(object : SearchView.OnQueryTextListener {
             override fun onQueryTextChange(newText: String): Boolean {
@@ -227,22 +223,21 @@ class AppsFragment : MainFragment(), AppsAdapter.OnItemClickListener, AppsAdapte
     }
 
     override fun onPrepareMenu(menu: Menu) {
-        super.onPrepareMenu(menu)
         menu.findItem(
             when (HailData.sortBy) {
                 HailData.SORT_INSTALL -> R.id.sort_by_install
                 HailData.SORT_UPDATE -> R.id.sort_by_update
                 else -> R.id.sort_by_name
             }
-        ).isChecked = true
+        )?.isChecked = true
         menu.findItem(
             if (HailData.filterSystemApps) R.id.filter_system_apps else R.id.filter_user_apps
-        ).isChecked = true
-        menu.findItem(R.id.filter_frozen_apps).isChecked = HailData.filterFrozenApps
-        menu.findItem(R.id.filter_unfrozen_apps).isChecked = HailData.filterUnfrozenApps
+        )?.isChecked = true
+        menu.findItem(R.id.filter_frozen_apps)?.isChecked = HailData.filterFrozenApps
+        menu.findItem(R.id.filter_unfrozen_apps)?.isChecked = HailData.filterUnfrozenApps
     }
 
-    override fun onMenuItemSelected(item: MenuItem): Boolean {
+    override fun onMenuItemClick(item: MenuItem): Boolean {
         when (item.itemId) {
             R.id.action_clone_help -> MaterialAlertDialogBuilder(activity)
                 .setTitle(R.string.clone_apps_help).setMessage(R.string.clone_apps_help_message)
@@ -254,8 +249,18 @@ class AppsFragment : MainFragment(), AppsAdapter.OnItemClickListener, AppsAdapte
             R.id.filter_system_apps -> changeAppsFilter(HailData.FILTER_SYSTEM_APPS, item)
             R.id.filter_frozen_apps -> changeAppsFilter(HailData.FILTER_FROZEN_APPS, item)
             R.id.filter_unfrozen_apps -> changeAppsFilter(HailData.FILTER_UNFROZEN_APPS, item)
+            else -> return false
         }
-        return false
+        return true
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (activity.currentDestinationId == R.id.nav_apps) {
+            val menu = activity.toolbar.menu
+            onSetupMenu(menu)
+            onPrepareMenu(menu)
+        }
     }
 
     private fun changeAppsSort(sort: String, item: MenuItem) {

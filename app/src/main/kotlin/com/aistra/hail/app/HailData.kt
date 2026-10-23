@@ -25,7 +25,7 @@ object HailData {
     const val URL_PAYPAL = "https://www.paypal.me/aistra0528"
     const val URL_TRANSLATE = "https://hosted.weblate.org/engage/hail/"
     const val VERSION = "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})"
-    private const val KEY_ID = "id"
+    const val KEY_ID = "id"
     const val KEY_TAG = "tag"
     private const val KEY_TAGS = "tags"
     private const val KEY_PINNED = "pinned"
@@ -161,6 +161,22 @@ object HailData {
     val skipNotifyingApp get() = sp.getBoolean(SKIP_NOTIFYING_APP, false)
     val dynamicShortcutAction get() = sp.getString(DYNAMIC_SHORTCUT_ACTION, ACTION_NONE)!!
 
+    fun getWorkingModeForTag(tagId: Int): String {
+        val tag = tags.firstOrNull { it.id == tagId }
+        val mode = tag?.workingMode ?: MODE_DEFAULT
+        return if (mode == MODE_DEFAULT || mode.isEmpty()) workingMode else mode
+    }
+
+    fun getWorkingModeForApp(appInfo: AppInfo): String {
+        val tagId = appInfo.tagIdList.firstOrNull() ?: 0
+        return getWorkingModeForTag(tagId)
+    }
+
+    fun getWorkingModeForPackage(packageName: String, userId: Int = HPackages.myUserId): String {
+        val appInfo = checkedList.firstOrNull { it.packageName == packageName && it.userId == userId }
+        return if (appInfo != null) getWorkingModeForApp(appInfo) else workingMode
+    }
+
     private val dir = "${app.filesDir.path}/v1"
     private val appsPath = "$dir/apps.json"
     private val tagsPath = "$dir/tags.json"
@@ -177,14 +193,15 @@ object HailData {
                         HPackages.myUserId
                     ) ?: continue
                     add(with(item) {
+                        val singleTagId = optJSONArray(KEY_TAGS)?.let {
+                            if (it.length() > 0) it.getInt(0) else 0
+                        } ?: optInt(KEY_TAG, 0)
                         AppInfo(
                             packageName = identity.packageName,
                             userId = identity.userId,
                             pinned = optBoolean(KEY_PINNED),
                             whitelisted = optBoolean(KEY_WHITELISTED),
-                            tagIdList = optJSONArray(KEY_TAGS)?.let {
-                                MutableList(it.length()) { index -> it.getInt(index) }
-                            } ?: mutableListOf(optInt(KEY_TAG))
+                            tagIdList = mutableListOf(singleTagId)
                         )
                     })
                 }
@@ -216,22 +233,33 @@ object HailData {
                         .put(KEY_USER_ID, it.userId)
                         .put(KEY_PINNED, it.pinned)
                         .put(KEY_WHITELISTED, it.whitelisted)
-                        .put(KEY_TAGS, JSONArray(it.tagIdList))
+                        .put(KEY_TAG, it.tagId)
+                        .put(KEY_TAGS, JSONArray().put(it.tagId))
                 )
             }
             toString()
         })
     }
 
-    val tags: MutableList<Pair<String, Int>> by lazy {
-        mutableListOf<Pair<String, Int>>().apply {
+    val tags: MutableList<TagInfo> by lazy {
+        mutableListOf<TagInfo>().apply {
             runCatching {
                 val json = JSONArray(HFiles.read(tagsPath))
                 for (i in 0 until json.length()) {
-                    add(with(json.getJSONObject(i)) { getString(KEY_TAG) to getInt(KEY_ID) })
+                    val obj = json.getJSONObject(i)
+                    add(
+                        TagInfo(
+                            name = obj.getString(KEY_TAG),
+                            id = obj.getInt(KEY_ID),
+                            workingMode = obj.optString(WORKING_MODE, MODE_DEFAULT).ifEmpty { MODE_DEFAULT }
+                        )
+                    )
                 }
             }.onFailure {
-                add(app.getString(R.string.label_default) to 0)
+                add(TagInfo(app.getString(R.string.label_default), 0, MODE_DEFAULT))
+            }
+            if (isEmpty()) {
+                add(TagInfo(app.getString(R.string.label_default), 0, MODE_DEFAULT))
             }
         }
     }
@@ -240,7 +268,12 @@ object HailData {
         if (!HFiles.exists(dir)) HFiles.createDirectories(dir)
         HFiles.write(tagsPath, JSONArray().run {
             tags.forEach {
-                put(JSONObject().put(KEY_TAG, it.first).put(KEY_ID, it.second))
+                put(
+                    JSONObject()
+                        .put(KEY_TAG, it.name)
+                        .put(KEY_ID, it.id)
+                        .put(WORKING_MODE, it.workingMode)
+                )
             }
             toString()
         })

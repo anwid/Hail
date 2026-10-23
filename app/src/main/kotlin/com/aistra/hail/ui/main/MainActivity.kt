@@ -2,6 +2,7 @@ package com.aistra.hail.ui.main
 
 import android.os.Bundle
 import android.view.Menu
+import android.view.MenuItem
 import androidx.appcompat.app.AppCompatActivity
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_STRONG
@@ -28,8 +29,11 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
 
 class MainActivity : AppCompatActivity(), NavController.OnDestinationChangedListener {
+    lateinit var binding: ActivityMainBinding
     lateinit var fab: ExtendedFloatingActionButton
     lateinit var appbar: AppBarLayout
+    lateinit var toolbar: com.google.android.material.appbar.MaterialToolbar
+    var currentDestinationId = R.id.nav_home
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -61,16 +65,19 @@ class MainActivity : AppCompatActivity(), NavController.OnDestinationChangedList
     }
 
     private fun initView() = ActivityMainBinding.inflate(layoutInflater).apply {
+        this@MainActivity.binding = this
         setContentView(root)
-        setSupportActionBar(appBarMain.toolbar)
         fab = appBarMain.fab
         appbar = appBarMain.appBarLayout
+        toolbar = appBarMain.toolbar
+        toolbar.layoutTransition = null
+        setSupportActionBar(toolbar)
 
         val navHostFragment = supportFragmentManager.findFragmentById(R.id.nav_host_fragment) as NavHostFragment
         val navController = navHostFragment.navController
         navController.addOnDestinationChangedListener(this@MainActivity)
         val appBarConfiguration = AppBarConfiguration.Builder(
-            R.id.nav_home, R.id.nav_apps, R.id.nav_settings, R.id.nav_about
+            R.id.nav_home, R.id.nav_apps, R.id.nav_settings
         ).build()
         setupActionBarWithNavController(navController, appBarConfiguration)
         bottomNav?.setupWithNavController(navController)
@@ -87,8 +94,66 @@ class MainActivity : AppCompatActivity(), NavController.OnDestinationChangedList
     }
 
     override fun onCreateOptionsMenu(menu: Menu?): Boolean {
-        menu?.let { MenuCompat.setGroupDividerEnabled(it, true) }
-        return super.onCreateOptionsMenu(menu)
+        if (menu == null) return false
+        menu.clear()
+        val menuRes = when (currentDestinationId) {
+            R.id.nav_apps -> R.menu.menu_apps
+            R.id.nav_settings -> R.menu.menu_settings
+            else -> R.menu.menu_home
+        }
+        menuInflater.inflate(menuRes, menu)
+        MenuCompat.setGroupDividerEnabled(menu, true)
+
+        when (currentDestinationId) {
+            R.id.nav_settings -> {
+                val hasTerminal = HailData.workingMode.startsWith(HailData.SU) ||
+                        HailData.workingMode.startsWith(HailData.SHIZUKU)
+                menu.findItem(R.id.action_terminal)?.isVisible = hasTerminal
+                menu.findItem(R.id.action_remove_owner)?.isVisible = HPolicy.isDeviceOwnerActive
+            }
+            R.id.nav_apps -> {
+                menu.findItem(
+                    when (HailData.sortBy) {
+                        HailData.SORT_INSTALL -> R.id.sort_by_install
+                        HailData.SORT_UPDATE -> R.id.sort_by_update
+                        else -> R.id.sort_by_name
+                    }
+                )?.isChecked = true
+                menu.findItem(
+                    if (HailData.filterSystemApps) R.id.filter_system_apps else R.id.filter_user_apps
+                )?.isChecked = true
+                menu.findItem(R.id.filter_frozen_apps)?.isChecked = HailData.filterFrozenApps
+                menu.findItem(R.id.filter_unfrozen_apps)?.isChecked = HailData.filterUnfrozenApps
+            }
+            R.id.nav_home -> {
+                menu.findItem(R.id.action_sort_done)?.isVisible = false
+            }
+        }
+
+        val handler = getActiveMenuHandler()
+        handler?.onSetupMenu(menu)
+        handler?.onPrepareMenu(menu)
+        return true
+    }
+
+    override fun onPrepareOptionsMenu(menu: Menu?): Boolean {
+        if (menu == null) return false
+        getActiveMenuHandler()?.onPrepareMenu(menu)
+        return super.onPrepareOptionsMenu(menu)
+    }
+
+    override fun onOptionsItemSelected(item: MenuItem): Boolean {
+        if (getActiveMenuHandler()?.onMenuItemClick(item) == true) {
+            return true
+        }
+        return super.onOptionsItemSelected(item)
+    }
+
+    private fun getActiveMenuHandler(): ActivityMenuHandler? {
+        val navHostFragment = supportFragmentManager.findFragmentById(R.id.nav_host_fragment) as? NavHostFragment
+        val primary = navHostFragment?.childFragmentManager?.primaryNavigationFragment
+            ?: navHostFragment?.childFragmentManager?.fragments?.firstOrNull { it.isVisible }
+        return primary as? ActivityMenuHandler
     }
 
     fun ownerRemoveDialog() {
@@ -109,5 +174,12 @@ class MainActivity : AppCompatActivity(), NavController.OnDestinationChangedList
     ) {
         fab.tag = destination.id == R.id.nav_home
         if (fab.tag == true) fab.show() else fab.hide()
+        appbar.setLifted(false)
+        appbar.setLiftOnScrollTargetView(null)
+
+        if (currentDestinationId != destination.id) {
+            currentDestinationId = destination.id
+            invalidateOptionsMenu()
+        }
     }
 }

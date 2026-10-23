@@ -30,16 +30,23 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
-import androidx.core.view.MenuHost
-import androidx.core.view.MenuProvider
+import com.aistra.hail.ui.main.ActivityMenuHandler
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import com.aistra.hail.HailApp.Companion.app
+import android.content.Context
+import androidx.core.content.edit
+import androidx.preference.PreferenceManager
 import com.aistra.hail.R
+import com.aistra.hail.app.AppInfo
 import com.aistra.hail.app.AppManager
 import com.aistra.hail.app.HailApi
 import com.aistra.hail.app.HailData
+import com.aistra.hail.app.TagInfo
 import com.aistra.hail.databinding.DialogInputBinding
+import com.aistra.hail.databinding.DialogRestoreBinding
+import org.json.JSONArray
+import org.json.JSONObject
 import com.aistra.hail.ui.main.MainActivity
 import com.aistra.hail.ui.main.MainFragment
 import com.aistra.hail.ui.theme.AppTheme
@@ -58,12 +65,10 @@ import kotlinx.coroutines.withContext
 import me.zhanghai.compose.preference.*
 import rikka.shizuku.Shizuku
 
-class SettingsFragment : MainFragment(), MenuProvider {
+class SettingsFragment : MainFragment(), ActivityMenuHandler {
     private val requestPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) {}
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
-        val menuHost = requireActivity() as MenuHost
-        menuHost.addMenuProvider(this, viewLifecycleOwner, Lifecycle.State.RESUMED)
         return ComposeView(requireContext()).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
@@ -264,6 +269,258 @@ class SettingsFragment : MainFragment(), MenuProvider {
                 icon = { Icon(imageVector = Icons.Outlined.CleaningServices, contentDescription = null) },
                 onClick = ::resetDynamicShortcuts
             )
+            horizontalDivider()
+            preferenceCategory(
+                key = "backup_and_restore",
+                title = { Text(text = stringResource(R.string.title_backup_and_restore)) }
+            )
+            preference(
+                key = "backup",
+                title = { Text(text = stringResource(R.string.action_backup)) },
+                summary = { Text(text = stringResource(R.string.summary_backup)) },
+                icon = { Icon(imageVector = Icons.Outlined.Backup, contentDescription = null) },
+                onClick = ::backupToClipboard
+            )
+            preference(
+                key = "restore",
+                title = { Text(text = stringResource(R.string.action_restore)) },
+                summary = { Text(text = stringResource(R.string.summary_restore)) },
+                icon = { Icon(imageVector = Icons.Outlined.Restore, contentDescription = null) },
+                onClick = ::showRestoreDialog
+            )
+        }
+    }
+
+    private fun backupToClipboard() {
+        runCatching {
+            val root = JSONObject().apply {
+                put("version", 1)
+                put("timestamp", System.currentTimeMillis())
+
+                // 1. SharedPreferences (settings)
+                val settingsObj = JSONObject()
+                val sp = PreferenceManager.getDefaultSharedPreferences(app)
+                sp.all.forEach { (key, value) ->
+                    when (value) {
+                        is Boolean -> settingsObj.put(key, value)
+                        is Int -> settingsObj.put(key, value)
+                        is Long -> settingsObj.put(key, value)
+                        is Float -> settingsObj.put(key, value.toDouble())
+                        is String -> settingsObj.put(key, value)
+                        is Set<*> -> settingsObj.put(key, JSONArray(value.toList()))
+                    }
+                }
+                put("settings", settingsObj)
+
+                // 2. Tags
+                val tagsArray = JSONArray()
+                HailData.tags.forEach { tag ->
+                    tagsArray.put(JSONObject().apply {
+                        put(HailData.KEY_TAG, tag.name)
+                        put(HailData.KEY_ID, tag.id)
+                        put(HailData.WORKING_MODE, tag.workingMode)
+                    })
+                }
+                put("tags", tagsArray)
+
+                // 3. Checked Apps
+                val appsArray = JSONArray()
+                HailData.checkedList.forEach { appInfo ->
+                    appsArray.put(JSONObject().apply {
+                        put(HailData.KEY_PACKAGE, appInfo.packageName)
+                        put(HailData.KEY_USER_ID, appInfo.userId)
+                        put("pinned", appInfo.pinned)
+                        put("whitelisted", appInfo.whitelisted)
+                        put("tagId", appInfo.tagId)
+                        put("tags", JSONArray().put(appInfo.tagId))
+                    })
+                }
+                put("apps", appsArray)
+
+                // 4. Home Order
+                val homeOrderSp = app.getSharedPreferences("home_order", Context.MODE_PRIVATE)
+                val homeOrderObj = JSONObject()
+                homeOrderSp.all.forEach { (key, value) ->
+                    if (value is String) {
+                        homeOrderObj.put(key, value)
+                    }
+                }
+                put("home_order", homeOrderObj)
+            }
+
+            val jsonString = root.toString(2)
+            HUI.copyText(jsonString)
+            HUI.showToast(R.string.msg_backup_exported)
+        }.onFailure {
+            HLog.e(it)
+            HUI.showToast(R.string.msg_restore_failed)
+        }
+    }
+
+    private fun showRestoreDialog() {
+        val binding = DialogRestoreBinding.inflate(layoutInflater)
+        binding.editText.filters = emptyArray()
+
+        binding.btnPaste.setOnClickListener {
+            val text = HUI.pasteText()
+            if (!text.isNullOrEmpty()) {
+                binding.editText.setText(text.trim())
+            } else {
+                HUI.showToast(R.string.msg_clipboard_empty)
+            }
+        }
+
+        val clipboardText = HUI.pasteText()
+        if (clipboardText != null && (clipboardText.trim().startsWith("{") || clipboardText.trim().startsWith("["))) {
+            binding.editText.setText(clipboardText.trim())
+        }
+
+        MaterialAlertDialogBuilder(requireActivity())
+            .setTitle(R.string.action_restore)
+            .setView(binding.root)
+            .setPositiveButton(R.string.action_restore) { _, _ ->
+                val input = binding.editText.text?.toString()?.trim().orEmpty()
+                if (input.isEmpty()) {
+                    HUI.showToast(R.string.msg_restore_failed)
+                    return@setPositiveButton
+                }
+                restoreFromJson(input)
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun restoreFromJson(jsonString: String) {
+        try {
+            val trimmed = jsonString.trim()
+            if (trimmed.startsWith("{")) {
+                val root = JSONObject(trimmed)
+
+                // 1. SharedPreferences
+                if (root.has("settings")) {
+                    val settingsObj = root.getJSONObject("settings")
+                    val sp = PreferenceManager.getDefaultSharedPreferences(app)
+                    sp.edit {
+                        val keys = settingsObj.keys()
+                        while (keys.hasNext()) {
+                            val key = keys.next()
+                            when (val v = settingsObj.get(key)) {
+                                is Boolean -> putBoolean(key, v)
+                                is Int -> putInt(key, v)
+                                is Long -> putLong(key, v)
+                                is Double -> putFloat(key, v.toFloat())
+                                is String -> putString(key, v)
+                                is JSONArray -> {
+                                    val set = mutableSetOf<String>()
+                                    for (i in 0 until v.length()) set.add(v.getString(i))
+                                    putStringSet(key, set)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // 2. Tags
+                if (root.has("tags")) {
+                    val tagsArray = root.getJSONArray("tags")
+                    HailData.tags.clear()
+                    for (i in 0 until tagsArray.length()) {
+                        val tagObj = tagsArray.getJSONObject(i)
+                        val name = tagObj.getString(HailData.KEY_TAG)
+                        val id = tagObj.getInt(HailData.KEY_ID)
+                        val mode = tagObj.optString(HailData.WORKING_MODE, HailData.MODE_DEFAULT).ifEmpty { HailData.MODE_DEFAULT }
+                        HailData.tags.add(TagInfo(name, id, mode))
+                    }
+                    if (HailData.tags.isEmpty()) {
+                        HailData.tags.add(TagInfo(app.getString(R.string.label_default), 0, HailData.MODE_DEFAULT))
+                    }
+                    HailData.saveTags()
+                }
+
+                // 3. Apps
+                if (root.has("apps")) {
+                    val appsArray = root.getJSONArray("apps")
+                    HailData.checkedList.clear()
+                    for (i in 0 until appsArray.length()) {
+                        val appObj = appsArray.getJSONObject(i)
+                        val pkg = appObj.getString(HailData.KEY_PACKAGE)
+                        val userId = appObj.optInt("userId", HPackages.myUserId)
+                        val pinned = appObj.optBoolean("pinned", false)
+                        val whitelisted = appObj.optBoolean("whitelisted", false)
+                        val tagId = if (appObj.has("tagId")) {
+                            appObj.getInt("tagId")
+                        } else if (appObj.has("tags")) {
+                            val arr = appObj.getJSONArray("tags")
+                            if (arr.length() > 0) arr.getInt(0) else 0
+                        } else {
+                            appObj.optInt(HailData.KEY_TAG, 0)
+                        }
+                        HailData.checkedList.add(
+                            AppInfo(
+                                packageName = pkg,
+                                pinned = pinned,
+                                whitelisted = whitelisted,
+                                tagIdList = mutableListOf(tagId),
+                                userId = userId
+                            )
+                        )
+                    }
+                    HailData.saveApps()
+                }
+
+                // 4. Home Order
+                if (root.has("home_order")) {
+                    val homeOrderObj = root.getJSONObject("home_order")
+                    val homeOrderSp = app.getSharedPreferences("home_order", Context.MODE_PRIVATE)
+                    homeOrderSp.edit {
+                        clear()
+                        val keys = homeOrderObj.keys()
+                        while (keys.hasNext()) {
+                            val key = keys.next()
+                            putString(key, homeOrderObj.getString(key))
+                        }
+                    }
+                }
+            } else if (trimmed.startsWith("[")) {
+                // Support restoring raw apps array
+                val appsArray = JSONArray(trimmed)
+                HailData.checkedList.clear()
+                for (i in 0 until appsArray.length()) {
+                    val entry = appsArray.get(i)
+                    val pkg = if (entry is JSONObject) entry.getString(HailData.KEY_PACKAGE) else entry.toString()
+                    val userId = if (entry is JSONObject) entry.optInt("userId", HPackages.myUserId) else HPackages.myUserId
+                    val tagId = if (entry is JSONObject) entry.optInt("tagId", 0) else 0
+                    val pinned = if (entry is JSONObject) entry.optBoolean("pinned", false) else false
+                    val whitelisted = if (entry is JSONObject) entry.optBoolean("whitelisted", false) else false
+                    HailData.checkedList.add(
+                        AppInfo(
+                            packageName = pkg,
+                            pinned = pinned,
+                            whitelisted = whitelisted,
+                            tagIdList = mutableListOf(tagId),
+                            userId = userId
+                        )
+                    )
+                }
+                HailData.saveApps()
+            } else {
+                HUI.showToast(R.string.msg_restore_failed)
+                return
+            }
+
+            // Refresh environment
+            app.setAppTheme(HailData.appTheme)
+            app.setAutoFreezeService(HailData.autoFreezeAfterLock)
+            AppIconCache.clear()
+            if (HailData.workingMode.startsWith(HailData.DHIZUKU) || HailData.tags.any { it.workingMode.startsWith(HailData.DHIZUKU) }) {
+                runCatching { HDhizuku.init() }
+            }
+
+            HUI.showToast(R.string.msg_restore_success)
+            activity?.recreate()
+        } catch (e: Exception) {
+            HLog.e(e)
+            HUI.showToast(R.string.msg_restore_failed)
         }
     }
 
@@ -569,26 +826,29 @@ class SettingsFragment : MainFragment(), MenuProvider {
             ?.setTextIsSelectable(true)
     }
 
-    override fun onMenuItemSelected(item: MenuItem): Boolean {
+    override fun onMenuItemClick(item: MenuItem): Boolean {
         when (item.itemId) {
             R.id.action_terminal -> showTerminalDialog()
             R.id.action_remove_owner -> (requireActivity() as MainActivity).ownerRemoveDialog()
             R.id.action_help -> HUI.openLink(HailData.URL_README)
+            else -> return false
         }
-        return false
-    }
-
-    override fun onCreateMenu(menu: Menu, inflater: MenuInflater) {
-        inflater.inflate(R.menu.menu_settings, menu)
+        return true
     }
 
     override fun onPrepareMenu(menu: Menu) {
-        super.onPrepareMenu(menu)
         if (HailData.workingMode.startsWith(HailData.SU) || HailData.workingMode.startsWith(
                 HailData.SHIZUKU
             )
-        ) menu.findItem(R.id.action_terminal).isVisible = true
-        else if (HPolicy.isDeviceOwnerActive) menu.findItem(R.id.action_remove_owner).isVisible = true
+        ) menu.findItem(R.id.action_terminal)?.isVisible = true
+        else if (HPolicy.isDeviceOwnerActive) menu.findItem(R.id.action_remove_owner)?.isVisible = true
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (activity.currentDestinationId == R.id.nav_settings) {
+            onPrepareMenu(activity.toolbar.menu)
+        }
     }
 
     private fun showTerminalDialog() {

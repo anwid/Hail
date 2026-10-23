@@ -21,16 +21,6 @@ class PagerAdapter(private val selectedList: List<AppInfo>) : RecyclerView.Adapt
     private var flags: Map<String, Int> = emptyMap()
     val currentList: List<AppInfo> get() = items.toList()
     var sorting = false
-        set(value) {
-            if (field == value) return
-            field = value
-            holders.forEach {
-                it.itemView.isActivated = value
-                it.itemView.scaleX = 1.0f
-                it.itemView.scaleY = 1.0f
-                it.itemView.alpha = 1.0f
-            }
-        }
     var startDrag: ((RecyclerView.ViewHolder) -> Unit)? = null
     private val holders = mutableSetOf<ViewHolder>()
     lateinit var onItemClickListener: OnItemClickListener

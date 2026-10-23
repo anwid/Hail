@@ -4,13 +4,17 @@ import android.graphics.Typeface
 import android.os.Bundle
 import android.view.HapticFeedbackConstants
 import android.view.LayoutInflater
+import android.view.Menu
+import android.view.MenuItem
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.animation.DecelerateInterpolator
+import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.view.ViewCompat
 import androidx.core.view.isVisible
+import androidx.viewpager2.widget.ViewPager2
 import com.aistra.hail.R
 import com.aistra.hail.app.AppInfo
 import com.aistra.hail.app.HailData
@@ -20,12 +24,14 @@ import com.aistra.hail.extensions.applyDefaultInsetter
 import com.aistra.hail.extensions.isLandscape
 import com.aistra.hail.extensions.isRtl
 import com.aistra.hail.extensions.paddingRelative
+import com.aistra.hail.ui.main.ActivityMenuHandler
+import com.aistra.hail.ui.main.MainActivity
 import com.aistra.hail.ui.main.MainFragment
 import com.google.android.material.color.MaterialColors
 import com.google.android.material.tabs.TabLayout
 import com.google.android.material.tabs.TabLayoutMediator
 
-class HomeFragment : MainFragment() {
+class HomeFragment : MainFragment(), ActivityMenuHandler {
     var multiselect: Boolean = false
     val selectedList: MutableList<AppInfo> = mutableListOf()
     private var _binding: FragmentHomeBinding? = null
@@ -94,12 +100,60 @@ class HomeFragment : MainFragment() {
             override fun onTabUnselected(tab: TabLayout.Tab) {}
             override fun onTabReselected(tab: TabLayout.Tab) {}
         })
+        binding.tabs.addOnLayoutChangeListener { _, left, _, right, _, oldLeft, _, oldRight, _ ->
+            if (right - left != oldRight - oldLeft) {
+                updateTabWidths()
+            }
+        }
         binding.tabs.post {
+            updateTabWidths()
             updateCustomTabsSelection(binding.tabs.selectedTabPosition)
         }
 
+        binding.pager.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
+            override fun onPageSelected(position: Int) {
+                super.onPageSelected(position)
+                binding.pager.post {
+                    if (isResumed && activity.currentDestinationId == R.id.nav_home) {
+                        val menu = activity.toolbar.menu
+                        onSetupMenu(menu)
+                        onPrepareMenu(menu)
+                    }
+                }
+            }
+        })
+
         binding.tabs.applyDefaultInsetter { paddingRelative(isRtl, start = !activity.isLandscape, end = true) }
         return binding.root
+    }
+
+    fun getCurrentPagerFragment(): PagerFragment? {
+        val pager = _binding?.pager ?: return null
+        val position = pager.currentItem
+        if (position < 0 || position >= tags.size) return null
+        val currentTagId = tags[position].second
+        return childFragmentManager.fragments.filterIsInstance<PagerFragment>().firstOrNull { it.tagId == currentTagId }
+    }
+
+    override fun onSetupMenu(menu: Menu) {
+        getCurrentPagerFragment()?.setupMenu(menu)
+    }
+
+    override fun onPrepareMenu(menu: Menu) {
+        getCurrentPagerFragment()?.prepareMenu(menu)
+    }
+
+    override fun onMenuItemClick(item: MenuItem): Boolean {
+        return getCurrentPagerFragment()?.handleMenuItemClick(item) ?: false
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (activity.currentDestinationId == R.id.nav_home) {
+            val menu = activity.toolbar.menu
+            onSetupMenu(menu)
+            onPrepareMenu(menu)
+        }
     }
 
     private fun updateCustomTabsSelection(selectedPosition: Int) {
@@ -119,12 +173,50 @@ class HomeFragment : MainFragment() {
 
     private fun updateTabMode() {
         val tabLayout = _binding?.tabs ?: return
-        if (tags.size <= 6) {
+        if (tags.size <= 4) {
             tabLayout.tabMode = TabLayout.MODE_FIXED
             tabLayout.tabGravity = TabLayout.GRAVITY_FILL
         } else {
-            tabLayout.tabMode = TabLayout.MODE_AUTO
+            tabLayout.tabMode = TabLayout.MODE_SCROLLABLE
             tabLayout.tabGravity = TabLayout.GRAVITY_FILL
+        }
+        updateTabWidths()
+    }
+
+    private fun updateTabWidths() {
+        val tabLayout = _binding?.tabs ?: return
+        if (tags.size <= 4) {
+            tabLayout.tabMode = TabLayout.MODE_FIXED
+            tabLayout.tabGravity = TabLayout.GRAVITY_FILL
+            val tabStrip = tabLayout.getChildAt(0) as? ViewGroup ?: return
+            for (i in 0 until tabStrip.childCount) {
+                val tabView = tabStrip.getChildAt(i)
+                val lp = tabView.layoutParams as? LinearLayout.LayoutParams
+                if (lp != null && (lp.width != 0 || lp.weight != 1f)) {
+                    lp.width = 0
+                    lp.weight = 1f
+                    tabView.layoutParams = lp
+                }
+                tabView.minimumWidth = 0
+            }
+        } else {
+            tabLayout.tabMode = TabLayout.MODE_SCROLLABLE
+            tabLayout.tabGravity = TabLayout.GRAVITY_FILL
+            val availableWidth = tabLayout.width
+            if (availableWidth > 0) {
+                val tabWidth = availableWidth / 4
+                val tabStrip = tabLayout.getChildAt(0) as? ViewGroup ?: return
+                for (i in 0 until tabStrip.childCount) {
+                    val tabView = tabStrip.getChildAt(i)
+                    val lp = tabView.layoutParams as? LinearLayout.LayoutParams
+                    if (lp != null && (lp.width != tabWidth || lp.weight != 0f)) {
+                        lp.width = tabWidth
+                        lp.weight = 0f
+                        tabView.layoutParams = lp
+                    }
+                    tabView.minimumWidth = tabWidth
+                }
+            }
         }
     }
 
@@ -307,6 +399,7 @@ class HomeFragment : MainFragment() {
         binding.pager.adapter?.notifyDataSetChanged()
         binding.pager.setCurrentItem(targetPosition, false)
         binding.tabs.post {
+            updateTabWidths()
             binding.tabs.getTabAt(targetPosition)?.select()
             updateCustomTabsSelection(targetPosition)
             binding.tabs.setScrollPosition(targetPosition, 0f, true)
@@ -318,7 +411,7 @@ class HomeFragment : MainFragment() {
         sorting = value
         binding.pager.isUserInputEnabled = !value
         for (position in 0 until binding.tabs.tabCount) {
-            binding.tabs.getTabAt(position)?.view?.isEnabled = !value
+            binding.tabs.getTabAt(position)?.view?.isClickable = !value
         }
     }
 

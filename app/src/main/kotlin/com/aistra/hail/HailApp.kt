@@ -21,7 +21,7 @@ class HailApp : Application() {
         app = this
         // DirtyDataUpdater.update(app)
         if (!HTarget.S) setAppTheme(HailData.appTheme)
-        if (HailData.workingMode.startsWith(HailData.DHIZUKU)) HDhizuku.init()
+        if (HailData.workingMode.startsWith(HailData.DHIZUKU) || HailData.tags.any { it.workingMode.startsWith(HailData.DHIZUKU) }) HDhizuku.init()
     }
 
     fun setAutoFreezeService(autoFreezeAfterLock: Boolean = HailData.autoFreezeAfterLock, context: Context = app) {

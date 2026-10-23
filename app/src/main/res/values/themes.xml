@@ -69,7 +69,9 @@
         <item name="android:windowIsTranslucent">true</item>
     </style>
 
-    <style name="Theme.Hail.AppBarOverlay" parent="ThemeOverlay.Material3.ActionBar"/>
+    <style name="Theme.Hail.AppBarOverlay" parent="ThemeOverlay.Material3.ActionBar">
+        <item name="elevationOverlayEnabled">false</item>
+    </style>
 
     <style name="Theme.Hail.PopupOverlay" parent="ThemeOverlay.Material3"/>
 </resources>

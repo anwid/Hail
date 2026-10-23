@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingStart="@dimen/padding_large"
+    android:paddingTop="@dimen/padding_medium"
+    android:paddingEnd="@dimen/padding_large"
+    android:paddingBottom="@dimen/padding_small">
+
+    <com.google.android.material.textfield.TextInputLayout
+        android:id="@+id/input_layout"
+        style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="@string/msg_restore_input_hint">
+
+        <com.google.android.material.textfield.TextInputEditText
+            android:id="@+id/edit_text"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="top|start"
+            android:inputType="textMultiLine"
+            android:minLines="8"
+            android:maxLines="16"
+            android:scrollbars="vertical"
+            android:overScrollMode="always" />
+    </com.google.android.material.textfield.TextInputLayout>
+
+    <Button
+        android:id="@+id/btn_paste"
+        style="@style/Widget.Material3.Button.TextButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="end"
+        android:text="@string/action_paste_clipboard" />
+</LinearLayout>
