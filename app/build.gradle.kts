@@ -5,14 +5,16 @@ plugins {
 
 android {
     val signingProps = file("../signing.properties")
-    val commitHash = providers.exec {
+    // Source archives do not include Git metadata, but should still be buildable.
+    val hasGitMetadata = rootProject.file(".git").exists()
+    val commitHash = if (hasGitMetadata) providers.exec {
         workingDir = rootDir
-        commandLine = "git rev-parse --short HEAD".split(" ")
-    }.standardOutput.asText.get().trim()
-    val commitSubject = providers.exec {
+        commandLine("git", "rev-parse", "--short", "HEAD")
+    }.standardOutput.asText.get().trim() else "custom"
+    val commitSubject = if (hasGitMetadata) providers.exec {
         workingDir = rootDir
-        commandLine = "git log -1 --pretty=%s".split(" ")
-    }.standardOutput.asText.get().trim()
+        commandLine("git", "log", "-1", "--pretty=%s")
+    }.standardOutput.asText.get().trim() else ""
 
     namespace = "com.aistra.hail"
     compileSdk = 36
@@ -28,12 +30,14 @@ android {
     buildTypes {
         debug {
             applicationIdSuffix = ".debug"
-            versionNameSuffix = "-g$commitHash"
+            versionNameSuffix = if (hasGitMetadata) "-g$commitHash" else "-custom"
         }
         release {
             isMinifyEnabled = true
             isShrinkResources = true
-            if (!commitSubject.startsWith("[release]")) versionNameSuffix = "-g$commitHash"
+            if (!commitSubject.startsWith("[release]")) {
+                versionNameSuffix = if (hasGitMetadata) "-g$commitHash" else "-custom"
+            }
             signingConfig = if (signingProps.exists()) {
                 val props = `java.util`.Properties().apply { load(signingProps.reader()) }
                 signingConfigs.create("release") {
@@ -81,6 +85,7 @@ kotlin {
 }
 
 dependencies {
+    testImplementation("junit:junit:4.13.2")
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.material3)

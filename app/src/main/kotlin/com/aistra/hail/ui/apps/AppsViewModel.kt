@@ -58,7 +58,8 @@ class AppsViewModel(application: Application) : AndroidViewModel(application) {
     fun updateAppList() {
         viewModelScope.launch {
             postRefreshState(true)
-            apps.postValue(HPackages.getInstalledApplications())
+            val installed = withContext(Dispatchers.IO) { HPackages.getApplicationsAcrossUsers() }
+            apps.postValue(installed)
         }
     }
 
@@ -81,7 +82,7 @@ class AppsViewModel(application: Application) : AndroidViewModel(application) {
 
     private val ApplicationInfo.isSystemApp: Boolean
         get() = flags and ApplicationInfo.FLAG_SYSTEM == ApplicationInfo.FLAG_SYSTEM
-    private val ApplicationInfo.isAppFrozen get() = AppManager.isAppFrozen(packageName)
+    private val ApplicationInfo.isAppFrozen get() = AppManager.isAppFrozen(packageName, HPackages.userIdOf(this))
 
     private suspend fun filterList(
         appList: List<ApplicationInfo>,
@@ -104,12 +105,12 @@ class AppsViewModel(application: Application) : AndroidViewModel(application) {
             }.run {
                 when (HailData.sortBy) {
                     HailData.SORT_INSTALL -> sortedBy {
-                        HPackages.getUnhiddenPackageInfoOrNull(it.packageName)
+                        HPackages.getUnhiddenPackageInfoOrNull(it.packageName, userId = HPackages.userIdOf(it))
                             ?.firstInstallTime ?: 0
                     }
 
                     HailData.SORT_UPDATE -> sortedByDescending {
-                        HPackages.getUnhiddenPackageInfoOrNull(it.packageName)?.lastUpdateTime ?: 0
+                        HPackages.getUnhiddenPackageInfoOrNull(it.packageName, userId = HPackages.userIdOf(it))?.lastUpdateTime ?: 0
                     }
 
                     else -> sortedWith(NameComparator)

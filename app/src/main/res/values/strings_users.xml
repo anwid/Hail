@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_package_user">%1$s · userId %2$d</string>
+    <string name="app_name_user">%1$s (userId %2$d)</string>
+    <string name="clone_apps_help">Clone apps and users</string>
+    <string name="clone_apps_help_message">With Root or authorized Shizuku, refresh the Apps list to load apps from other Android users, including supported app clones. Each entry shows its userId and can be added and frozen separately. Select a freeze mode supported by your device (for example Shizuku Disable). Other working modes only manage the current user. Clones inside third-party virtual containers are not separate Android users.</string>
+</resources>

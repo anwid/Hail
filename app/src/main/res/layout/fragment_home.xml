@@ -10,7 +10,13 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:clipToPadding="false"
-        app:tabMode="scrollable" />
+        app:tabIndicatorHeight="0dp"
+        app:tabMode="fixed"
+        app:tabGravity="fill"
+        app:tabMaxWidth="0dp"
+        app:tabMinWidth="0dp"
+        app:tabPaddingEnd="0dp"
+        app:tabPaddingStart="0dp" />
 
     <androidx.viewpager2.widget.ViewPager2
         android:id="@+id/pager"

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_package_user">%1$s · 用户 %2$d</string>
+    <string name="app_name_user">%1$s（用户 %2$d）</string>
+    <string name="clone_apps_help">分身应用与用户</string>
+    <string name="clone_apps_help_message">使用 Root 或已授权的 Shizuku 后，下拉刷新应用列表，可读取其他 Android 用户中的应用，包括系统支持的分身。每项显示用户编号 userId，可独立添加、冻结和解冻。请选择设备支持的冻结模式，例如 Shizuku「停用」。其他工作模式仅管理当前用户。第三方虚拟容器内的分身不属于独立 Android 用户。</string>
+</resources>

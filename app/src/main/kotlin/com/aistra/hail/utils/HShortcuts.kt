@@ -48,18 +48,20 @@ object HShortcuts {
         )
     }
 
-    fun addDynamicShortcut(packageName: String) {
+    fun addDynamicShortcut(packageName: String, userId: Int = HPackages.myUserId) {
         if (HailData.biometricLogin) return
-        val applicationInfo = HPackages.getApplicationInfoOrNull(packageName)
+        val applicationInfo = HPackages.getApplicationInfoOrNull(packageName, userId = userId)
+        val id = if (userId == HPackages.myUserId) packageName.hashCode().toString() else "dynamic:$userId:$packageName"
+        val name = applicationInfo?.loadLabel(app.packageManager) ?: packageName
         val shortcut =
-            ShortcutInfoCompat.Builder(app, packageName.hashCode().toString()) // Make id different from pin
+            ShortcutInfoCompat.Builder(app, id) // Make id different from pin
                 .setIcon(IconCompat.createWithBitmap(applicationInfo?.let {
                     IconPack.loadIcon(it.packageName) ?: iconLoader.loadIcon(it)
                 } ?: getBitmapFromDrawable(
                     app.packageManager.defaultActivityIcon
                 ))).setShortLabel(
-                    applicationInfo?.loadLabel(app.packageManager) ?: packageName
-                ).setIntent(HailApi.getIntentForPackage(HailApi.ACTION_LAUNCH, packageName)).build()
+                    if (userId == HPackages.myUserId) name else app.getString(R.string.app_name_user, name, userId)
+                ).setIntent(HailApi.getIntentForPackage(HailApi.ACTION_LAUNCH, packageName, userId)).build()
         ShortcutManagerCompat.pushDynamicShortcut(app, shortcut)
         addDynamicShortcutAction(HailData.dynamicShortcutAction)
     }

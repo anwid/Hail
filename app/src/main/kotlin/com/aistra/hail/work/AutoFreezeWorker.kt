@@ -9,6 +9,7 @@ import com.aistra.hail.app.AppManager
 import com.aistra.hail.app.HailData
 import com.aistra.hail.services.AutoFreezeService
 import com.aistra.hail.utils.HSystem
+import com.aistra.hail.utils.HPackages
 
 class AutoFreezeWorker(context: Context, params: WorkerParameters) : Worker(context, params) {
     override fun doWork(): Result {
@@ -30,7 +31,9 @@ class AutoFreezeWorker(context: Context, params: WorkerParameters) : Worker(cont
         HailData.skipWhileCharging && HSystem.isCharging(context)
 
     private fun isSkipApp(context: Context, appInfo: AppInfo): Boolean =
-        AppManager.isAppFrozen(appInfo.packageName) || (HailData.skipForegroundApp && HSystem.isForegroundApp(
+        AppManager.isAppFrozen(appInfo.packageName, appInfo.userId) || (appInfo.userId == HPackages.myUserId && HailData.skipForegroundApp && HSystem.isForegroundApp(
             context, appInfo.packageName
-        )) || (HailData.skipNotifyingApp && AutoFreezeService.instance.activeNotifications.any { it.packageName == appInfo.packageName }) || appInfo.whitelisted
+        )) || (HailData.skipNotifyingApp && AutoFreezeService.instance.activeNotifications.any {
+            it.packageName == appInfo.packageName && it.user.hashCode() == appInfo.userId
+        }) || appInfo.whitelisted
 }

@@ -4,15 +4,12 @@ import android.os.Build
 import androidx.annotation.RequiresApi
 
 object HShell {
-    private fun getCurrentUserId(): Int = execSU("am get-current-user").second?.trim()?.toIntOrNull() ?: 0
-
-    private val userArg: String
-        get() = "--user ${getCurrentUserId()}"
-
     fun execute(command: String, root: Boolean): Pair<Int, String?> = runCatching {
         ProcessBuilder(if (root) "su" else "sh").redirectErrorStream(true).start().run {
             outputStream.use { it.write(command.toByteArray()) }
-            waitFor() to inputStream.bufferedReader().use { it.readText() }.also { destroy() }
+            // Drain before waiting: package dumps can exceed the pipe buffer.
+            val output = inputStream.bufferedReader().use { it.readText() }
+            waitFor() to output.also { destroy() }
         }
     }.getOrElse { 1 to it.stackTraceToString() }
 
@@ -22,28 +19,37 @@ object HShell {
 
     val lockScreen get() = execSU("input keyevent KEYCODE_POWER").first == 0
 
-    fun forceStopApp(packageName: String): Boolean = execSU("am force-stop $userArg $packageName").first == 0
+    private fun runForUser(command: String, packageName: String, userId: Int): Boolean {
+        if (userId < 0) return false
+        val success = execSU("$command --user $userId ${HUserApps.quote(packageName)}").first == 0
+        HUserApps.invalidate(packageName, userId)
+        return success
+    }
 
-    fun setAppDisabled(packageName: String, disabled: Boolean): Boolean =
-        execSU("pm ${if (disabled) "disable" else "enable"} $userArg $packageName").first == 0
+    fun forceStopApp(packageName: String, userId: Int = HPackages.myUserId): Boolean =
+        runForUser("am force-stop", packageName, userId)
 
-    fun setAppHidden(packageName: String, hidden: Boolean): Boolean =
-        execSU("pm ${if (hidden) "hide" else "unhide"} $userArg $packageName").first == 0
+    fun setAppDisabled(packageName: String, disabled: Boolean, userId: Int = HPackages.myUserId): Boolean =
+        runForUser("pm ${if (disabled) "disable" else "enable"}", packageName, userId)
 
-    fun setAppSuspended(packageName: String, suspended: Boolean): Boolean =
-        execSU("pm ${if (suspended) "suspend" else "unsuspend"} $userArg $packageName").first == 0
+    fun setAppHidden(packageName: String, hidden: Boolean, userId: Int = HPackages.myUserId): Boolean =
+        runForUser("pm ${if (hidden) "hide" else "unhide"}", packageName, userId)
 
-    fun uninstallApp(packageName: String) = execSU(
-        "pm ${if (HPackages.canUninstallNormally(packageName)) "uninstall" else "uninstall $userArg"} $packageName"
-    ).first == 0
+    fun setAppSuspended(packageName: String, suspended: Boolean, userId: Int = HPackages.myUserId): Boolean =
+        runForUser("pm ${if (suspended) "suspend" else "unsuspend"}", packageName, userId)
 
-    fun reinstallApp(packageName: String) = execSU("pm install-existing $userArg $packageName").first == 0
+    fun uninstallApp(packageName: String, userId: Int = HPackages.myUserId): Boolean =
+        runForUser("pm uninstall", packageName, userId)
+
+    fun reinstallApp(packageName: String, userId: Int = HPackages.myUserId): Boolean =
+        runForUser("pm install-existing", packageName, userId)
 
     @RequiresApi(Build.VERSION_CODES.P)
-    fun setAppRestricted(packageName: String, restricted: Boolean) = execSU(
-        "appops set $userArg $packageName RUN_ANY_IN_BACKGROUND ${if (restricted) "ignore" else "allow"}"
-    ).first == 0
+    fun setAppRestricted(packageName: String, restricted: Boolean, userId: Int = HPackages.myUserId) =
+        userId >= 0 && execSU(
+            "appops set --user $userId ${HUserApps.quote(packageName)} RUN_ANY_IN_BACKGROUND ${if (restricted) "ignore" else "allow"}"
+        ).first == 0
 
     fun grantPermission(packageName: String, permission: String) =
-        execSU("pm grant $userArg $packageName $permission").first == 0
+        execSU("pm grant --user ${HPackages.myUserId} ${HUserApps.quote(packageName)} ${HUserApps.quote(permission)}").first == 0
 }

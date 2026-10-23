@@ -1,7 +1,6 @@
 package com.aistra.hail.ui.apps
 
 import android.os.Bundle
-import android.provider.Settings
 import android.text.InputType
 import android.view.*
 import android.widget.CompoundButton
@@ -17,6 +16,7 @@ import androidx.recyclerview.widget.GridLayoutManager
 import com.aistra.hail.HailApp.Companion.app
 import com.aistra.hail.R
 import com.aistra.hail.app.AppManager
+import com.aistra.hail.app.AppInfo
 import com.aistra.hail.app.HailData
 import com.aistra.hail.databinding.FragmentAppsBinding
 import com.aistra.hail.extensions.*
@@ -49,14 +49,14 @@ class AppsFragment : MainFragment(), AppsAdapter.OnItemClickListener, AppsAdapte
     private var contextMenuInfo: ContextMenu.ContextMenuInfo? = null
 
 
-    private var exportApkPkg: String? = null
+    private var exportApkApp: AppInfo? = null
     private val exportApk =
         registerForActivityResult(CreateDocument("application/vnd.android.package-archive")) { uri ->
-            val exportApkPkg = exportApkPkg
-            this.exportApkPkg = null
-            if (exportApkPkg == null || uri == null) return@registerForActivityResult
+            val exportApp = exportApkApp
+            this.exportApkApp = null
+            if (exportApp == null || uri == null) return@registerForActivityResult
             lifecycleScope.launch {
-                val applicationInfo = HPackages.getApplicationInfoOrNull(exportApkPkg) ?: return@launch
+                val applicationInfo = exportApp.applicationInfo ?: return@launch
                 val dialog =
                     MaterialAlertDialogBuilder(activity).setView(R.layout.dialog_progress).setCancelable(false).show()
                 runCatching {
@@ -132,7 +132,8 @@ class AppsFragment : MainFragment(), AppsAdapter.OnItemClickListener, AppsAdapte
     ) {
         contextMenuInfo = menuInfo
         val viewHolder = ((menuInfo as HRecyclerView.RecyclerViewContextMenuInfo).viewHolder as AppsAdapter.ViewHolder)
-        menu.setHeaderTitle(viewHolder.info.loadLabel(activity.packageManager))
+        menu.setHeaderTitle(getString(R.string.app_name_user,
+            viewHolder.info.loadLabel(activity.packageManager), HPackages.userIdOf(viewHolder.info)))
         activity.menuInflater.inflate(R.menu.menu_apps_action, menu)
         super.onCreateContextMenu(menu, v, menuInfo)
     }
@@ -143,20 +144,21 @@ class AppsFragment : MainFragment(), AppsAdapter.OnItemClickListener, AppsAdapte
         val info = viewHolder.info
         val name = info.loadLabel(app.packageManager)
         val pkg = info.packageName
+        val userId = HPackages.userIdOf(info)
         when (item.itemId) {
-            R.id.action_details -> HUI.startActivity(
-                Settings.ACTION_APPLICATION_DETAILS_SETTINGS, HPackages.packageUri(pkg)
-            )
+            R.id.action_details -> if (!HPackages.showAppDetails(pkg, userId)) {
+                HUI.showToast(R.string.permission_denied)
+            }
 
             R.id.action_export_clipboard -> {
                 HUI.copyText(pkg)
                 HUI.showToast(R.string.msg_text_copied, pkg)
             }
 
-            R.id.action_extract_apk -> extractApk(pkg)
-            R.id.action_uninstall -> uninstallApp(name, pkg)
+            R.id.action_extract_apk -> extractApk(pkg, userId)
+            R.id.action_uninstall -> uninstallApp(name, pkg, userId)
             R.id.action_reinstall -> {
-                if (AppManager.reinstallApp(pkg)) updateAppList()
+                if (AppManager.reinstallApp(pkg, userId)) updateAppList()
                 else HUI.showToast(R.string.operation_failed, name)
             }
 
@@ -165,42 +167,43 @@ class AppsFragment : MainFragment(), AppsAdapter.OnItemClickListener, AppsAdapte
         return true
     }
 
-    private fun extractApk(pkg: String) {
-        exportApkPkg = pkg
-        exportApk.launch(HPackages.getUnhiddenPackageInfoOrNull(pkg)?.exportFileName ?: pkg)
+    private fun extractApk(pkg: String, userId: Int) {
+        exportApkApp = AppInfo(pkg, userId = userId)
+        exportApk.launch(HPackages.getUnhiddenPackageInfoOrNull(pkg, userId = userId)?.exportFileName ?: pkg)
     }
 
-    private fun uninstallApp(name: CharSequence, pkg: String) {
+    private fun uninstallApp(name: CharSequence, pkg: String, userId: Int) {
         when {
-            HPackages.isAppUninstalled(pkg) -> HUI.showToast(R.string.app_not_installed)
+            HPackages.isAppUninstalled(pkg, userId) -> HUI.showToast(R.string.app_not_installed)
 
-            pkg == app.packageName -> {
+            pkg == app.packageName && userId == HPackages.myUserId -> {
                 when {
                     HPolicy.isDeviceOwnerActive -> activity.ownerRemoveDialog()
                     HPolicy.isProfileOwner -> HPolicy.removeProfileOwner()
                     HPolicy.isAdminActive -> HPolicy.removeActiveAdmin()
-                    else -> showUninstallDialog(name, pkg)
+                    else -> showUninstallDialog(name, pkg, userId)
                 }
             }
 
-            HailData.workingMode == HailData.MODE_DEFAULT -> AppManager.uninstallApp(pkg)
-            else -> showUninstallDialog(name, pkg)
+            HailData.workingMode == HailData.MODE_DEFAULT && userId == HPackages.myUserId -> AppManager.uninstallApp(pkg)
+            else -> showUninstallDialog(name, pkg, userId)
         }
     }
 
-    private fun showUninstallDialog(name: CharSequence, pkg: String) {
-        MaterialAlertDialogBuilder(activity).setTitle(name).setMessage(R.string.msg_uninstall)
+    private fun showUninstallDialog(name: CharSequence, pkg: String, userId: Int) {
+        MaterialAlertDialogBuilder(activity).setTitle(getString(R.string.app_name_user, name, userId)).setMessage(R.string.msg_uninstall)
             .setPositiveButton(android.R.string.ok) { _, _ ->
-                if (AppManager.uninstallApp(pkg)) updateAppList()
+                if (AppManager.uninstallApp(pkg, userId)) updateAppList()
+                else HUI.showToast(R.string.operation_failed, name)
             }.setNegativeButton(android.R.string.cancel, null).show()
     }
 
     override fun onItemCheckedChange(
-        buttonView: CompoundButton, isChecked: Boolean, packageName: String
+        buttonView: CompoundButton, isChecked: Boolean, packageName: String, userId: Int
     ) {
-        if (isChecked) HailData.addCheckedApp(packageName)
-        else HailData.removeCheckedApp(packageName)
-        buttonView.isChecked = HailData.isChecked(packageName)
+        if (isChecked) HailData.addCheckedApp(packageName, userId = userId)
+        else HailData.removeCheckedApp(packageName, userId = userId)
+        buttonView.isChecked = HailData.isChecked(packageName, userId)
     }
 
     override fun onCreateMenu(menu: Menu, inflater: MenuInflater) {
@@ -241,15 +244,14 @@ class AppsFragment : MainFragment(), AppsAdapter.OnItemClickListener, AppsAdapte
 
     override fun onMenuItemSelected(item: MenuItem): Boolean {
         when (item.itemId) {
+            R.id.action_clone_help -> MaterialAlertDialogBuilder(activity)
+                .setTitle(R.string.clone_apps_help).setMessage(R.string.clone_apps_help_message)
+                .setPositiveButton(android.R.string.ok, null).show()
             R.id.sort_by_name -> changeAppsSort(HailData.SORT_NAME, item)
             R.id.sort_by_install -> changeAppsSort(HailData.SORT_INSTALL, item)
             R.id.sort_by_update -> changeAppsSort(HailData.SORT_UPDATE, item)
             R.id.filter_user_apps -> changeAppsFilter(HailData.FILTER_USER_APPS, item)
-            R.id.filter_system_apps -> MaterialAlertDialogBuilder(activity).setMessage(R.string.freeze_system_app)
-                .setPositiveButton(R.string.action_continue) { _, _ ->
-                    changeAppsFilter(HailData.FILTER_SYSTEM_APPS, item)
-                }.setNegativeButton(android.R.string.cancel, null).show()
-
+            R.id.filter_system_apps -> changeAppsFilter(HailData.FILTER_SYSTEM_APPS, item)
             R.id.filter_frozen_apps -> changeAppsFilter(HailData.FILTER_FROZEN_APPS, item)
             R.id.filter_unfrozen_apps -> changeAppsFilter(HailData.FILTER_UNFROZEN_APPS, item)
         }
@@ -287,9 +289,9 @@ class AppsFragment : MainFragment(), AppsAdapter.OnItemClickListener, AppsAdapte
     private fun updateAppList() = model.updateAppList()
     private fun updateDisplayAppList() = model.updateDisplayAppList()
 
-    override fun onDestroy() {
+    override fun onDestroyView() {
         appsAdapter.onDestroy()
-        super.onDestroy()
+        super.onDestroyView()
         _binding = null
     }
 }

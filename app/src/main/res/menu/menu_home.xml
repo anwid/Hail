@@ -2,6 +2,18 @@
       xmlns:app="http://schemas.android.com/apk/res-auto"
       xmlns:tools="http://schemas.android.com/tools">
     <item
+            android:id="@+id/action_sort_done"
+            android:title="@string/action_sort_done"
+            app:showAsAction="always"/>
+    <item
+            android:id="@+id/action_home_sort"
+            android:title="@string/action_home_sort"
+            app:showAsAction="never"/>
+    <item
+            android:id="@+id/action_edit_current_tag"
+            android:title="@string/action_edit_current_tag"
+            app:showAsAction="never"/>
+    <item
             android:id="@+id/action_search"
             android:icon="@drawable/ic_outline_search"
             android:title="@string/action_search"

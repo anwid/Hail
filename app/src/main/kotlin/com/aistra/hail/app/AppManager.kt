@@ -18,15 +18,18 @@ object AppManager {
             }
         }
 
-    fun isAppFrozen(packageName: String): Boolean = with(HailData.workingMode) {
+    val supportsOtherUsers: Boolean
+        get() = HailData.workingMode.startsWith(HailData.SU) || HailData.workingMode.startsWith(HailData.SHIZUKU)
+
+    fun isAppFrozen(packageName: String, userId: Int = HPackages.myUserId): Boolean = with(HailData.workingMode) {
         when {
-            endsWith(HailData.STOP) -> HPackages.isAppStopped(packageName)
-            endsWith(HailData.DISABLE) -> HPackages.isAppDisabled(packageName)
-            endsWith(HailData.HIDE) -> HPackages.isAppHidden(packageName)
-            endsWith(HailData.SUSPEND) -> HPackages.isAppSuspended(packageName)
-            else -> HPackages.isAppDisabled(packageName)
-                    || HPackages.isAppHidden(packageName)
-                    || HPackages.isAppSuspended(packageName)
+            endsWith(HailData.STOP) -> HPackages.isAppStopped(packageName, userId)
+            endsWith(HailData.DISABLE) -> HPackages.isAppDisabled(packageName, userId)
+            endsWith(HailData.HIDE) -> HPackages.isAppHidden(packageName, userId)
+            endsWith(HailData.SUSPEND) -> HPackages.isAppSuspended(packageName, userId)
+            else -> HPackages.isAppDisabled(packageName, userId)
+                    || HPackages.isAppHidden(packageName, userId)
+                    || HPackages.isAppSuspended(packageName, userId)
         }
     }
 
@@ -41,12 +44,12 @@ object AppManager {
             else -> {
                 excludeMe.forEach {
                     when {
-                        setAppFrozen(it.packageName, frozen) -> {
+                        setAppFrozen(it.packageName, frozen, it.userId) -> {
                             i++
                             name = it.name.toString()
                         }
 
-                        it.applicationInfo != null -> denied = true
+                        it.applicationInfo != null || it.userId != HPackages.myUserId -> denied = true
                     }
                 }
             }
@@ -54,20 +57,22 @@ object AppManager {
         return if (denied && i == 0) null else if (i == 1) name else i.toString()
     }
 
-    fun setAppFrozen(packageName: String, frozen: Boolean): Boolean =
-        packageName != BuildConfig.APPLICATION_ID && when (HailData.workingMode) {
+    fun setAppFrozen(packageName: String, frozen: Boolean, userId: Int = HPackages.myUserId): Boolean {
+        if (userId < 0 || packageName == BuildConfig.APPLICATION_ID) return false
+        if (userId != HPackages.myUserId && !supportsOtherUsers) return false
+        return when (HailData.workingMode) {
             HailData.MODE_OWNER_HIDE -> HPolicy.setAppHidden(packageName, frozen)
             HailData.MODE_OWNER_SUSPEND -> HPolicy.setAppSuspended(packageName, frozen)
             HailData.MODE_DHIZUKU_HIDE -> HDhizuku.setAppHidden(packageName, frozen)
             HailData.MODE_DHIZUKU_SUSPEND -> HDhizuku.setAppSuspended(packageName, frozen)
-            HailData.MODE_SU_STOP -> !frozen || HShell.forceStopApp(packageName)
-            HailData.MODE_SU_DISABLE -> HShell.setAppDisabled(packageName, frozen)
-            HailData.MODE_SU_HIDE -> HShell.setAppHidden(packageName, frozen)
-            HailData.MODE_SU_SUSPEND -> HShell.setAppSuspended(packageName, frozen)
-            HailData.MODE_SHIZUKU_STOP -> !frozen || HShizuku.forceStopApp(packageName)
-            HailData.MODE_SHIZUKU_DISABLE -> HShizuku.setAppDisabled(packageName, frozen)
-            HailData.MODE_SHIZUKU_HIDE -> HShizuku.setAppHidden(packageName, frozen)
-            HailData.MODE_SHIZUKU_SUSPEND -> HShizuku.setAppSuspended(packageName, frozen)
+            HailData.MODE_SU_STOP -> !frozen || HShell.forceStopApp(packageName, userId)
+            HailData.MODE_SU_DISABLE -> HShell.setAppDisabled(packageName, frozen, userId)
+            HailData.MODE_SU_HIDE -> HShell.setAppHidden(packageName, frozen, userId)
+            HailData.MODE_SU_SUSPEND -> HShell.setAppSuspended(packageName, frozen, userId)
+            HailData.MODE_SHIZUKU_STOP -> !frozen || HShizuku.forceStopApp(packageName, userId)
+            HailData.MODE_SHIZUKU_DISABLE -> HShizuku.setAppDisabled(packageName, frozen, userId)
+            HailData.MODE_SHIZUKU_HIDE -> HShizuku.setAppHidden(packageName, frozen, userId)
+            HailData.MODE_SHIZUKU_SUSPEND -> HShizuku.setAppSuspended(packageName, frozen, userId)
             HailData.MODE_ISLAND_HIDE -> HIsland.setAppHidden(packageName, frozen)
             HailData.MODE_ISLAND_SUSPEND -> HIsland.setAppSuspended(packageName, frozen)
             HailData.MODE_PRIVAPP_STOP -> !frozen || HPackages.forceStopApp(packageName)
@@ -76,23 +81,26 @@ object AppManager {
 
             else -> false
         }
+    }
 
-    fun uninstallApp(packageName: String): Boolean = with(HailData.workingMode) {
+    fun uninstallApp(packageName: String, userId: Int = HPackages.myUserId): Boolean = with(HailData.workingMode) {
+        if (userId < 0 || (userId != HPackages.myUserId && !supportsOtherUsers)) return false
         if (
             (startsWith(HailData.OWNER) && HPolicy.uninstallApp(packageName))
             || (startsWith(HailData.DHIZUKU) && HDhizuku.uninstallApp(packageName))
-            || ((startsWith(HailData.SU) || startsWith(HailData.JAILBREAK)) && HShell.uninstallApp(packageName))
-            || (startsWith(HailData.SHIZUKU) && HShizuku.uninstallApp(packageName))
+            || ((startsWith(HailData.SU) || startsWith(HailData.JAILBREAK)) && HShell.uninstallApp(packageName, userId))
+            || (startsWith(HailData.SHIZUKU) && HShizuku.uninstallApp(packageName, userId))
         )
             return true
-        HUI.startActivity(Intent.ACTION_DELETE, HPackages.packageUri(packageName))
+        if (userId == HPackages.myUserId) HUI.startActivity(Intent.ACTION_DELETE, HPackages.packageUri(packageName))
         false
     }
 
-    fun reinstallApp(packageName: String): Boolean = with(HailData.workingMode) {
+    fun reinstallApp(packageName: String, userId: Int = HPackages.myUserId): Boolean = with(HailData.workingMode) {
+        if (userId < 0 || (userId != HPackages.myUserId && !supportsOtherUsers)) return false
         when {
-            startsWith(HailData.SU) || startsWith(HailData.JAILBREAK) -> HShell.reinstallApp(packageName)
-            startsWith(HailData.SHIZUKU) -> HShizuku.reinstallApp(packageName)
+            startsWith(HailData.SU) || startsWith(HailData.JAILBREAK) -> HShell.reinstallApp(packageName, userId)
+            startsWith(HailData.SHIZUKU) -> HShizuku.reinstallApp(packageName, userId)
             else -> false
         }
     }

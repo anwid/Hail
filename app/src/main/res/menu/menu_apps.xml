@@ -53,4 +53,6 @@
             </group>
         </menu>
     </item>
+    <item android:id="@+id/action_clone_help"
+          android:title="@string/clone_apps_help" />
 </menu>

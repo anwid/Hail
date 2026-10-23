@@ -8,6 +8,7 @@ import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.aistra.hail.app.AppManager
+import com.aistra.hail.R
 import com.aistra.hail.app.HailData
 import com.aistra.hail.databinding.ItemAppsBinding
 import com.aistra.hail.utils.AppIconCache
@@ -21,16 +22,16 @@ class AppsAdapter : ListAdapter<ApplicationInfo, AppsAdapter.ViewHolder>(DIFF) {
         val DIFF = object : DiffUtil.ItemCallback<ApplicationInfo>() {
             override fun areItemsTheSame(
                 oldItem: ApplicationInfo, newItem: ApplicationInfo
-            ): Boolean = oldItem.packageName == newItem.packageName
+            ): Boolean = oldItem.packageName == newItem.packageName && oldItem.uid == newItem.uid
 
             override fun areContentsTheSame(oldItem: ApplicationInfo, newItem: ApplicationInfo): Boolean =
-                oldItem.flags and ApplicationInfo.FLAG_INSTALLED == newItem.flags and ApplicationInfo.FLAG_INSTALLED
+                oldItem.flags == newItem.flags && oldItem.enabled == newItem.enabled
         }
     }
 
     lateinit var onItemClickListener: OnItemClickListener
     lateinit var onItemCheckedChangeListener: OnItemCheckedChangeListener
-    private var loadIconJob: Job? = null
+    private val holders = mutableSetOf<ViewHolder>()
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder = ViewHolder(
         ItemAppsBinding.inflate(LayoutInflater.from(parent.context), parent, false)
@@ -38,16 +39,26 @@ class AppsAdapter : ListAdapter<ApplicationInfo, AppsAdapter.ViewHolder>(DIFF) {
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
         val info = currentList[position]
+        holders.add(holder)
         holder.bindInfo(info)
     }
 
     fun onDestroy() {
-        if (loadIconJob?.isActive == true) loadIconJob?.cancel()
+        holders.forEach { it.loadIconJob?.cancel() }
+        holders.clear()
+    }
+
+    override fun onViewRecycled(holder: ViewHolder) {
+        holder.loadIconJob?.cancel()
+        holders.remove(holder)
+        super.onViewRecycled(holder)
     }
 
     inner class ViewHolder(private val binding: ItemAppsBinding) : RecyclerView.ViewHolder(binding.root) {
         lateinit var info: ApplicationInfo
+        var loadIconJob: Job? = null
         private val pkg get() = info.packageName
+        private val userId get() = HPackages.userIdOf(info)
 
         /**
          * Flag that view data is being updated to avoid triggering the event.
@@ -60,25 +71,26 @@ class AppsAdapter : ListAdapter<ApplicationInfo, AppsAdapter.ViewHolder>(DIFF) {
                 isLongClickable = true
             }
             binding.appStar.setOnCheckedChangeListener { button, isChecked ->
-                if (!updating) onItemCheckedChangeListener.onItemCheckedChange(button, isChecked, pkg)
+                if (!updating) onItemCheckedChangeListener.onItemCheckedChange(button, isChecked, pkg, userId)
             }
         }
 
         fun bindInfo(info: ApplicationInfo) {
             updating = true
+            loadIconJob?.cancel()
             this.info = info
-            val frozen = AppManager.isAppFrozen(pkg)
+            val frozen = AppManager.isAppFrozen(pkg, userId)
 
             binding.appIcon.apply {
                 loadIconJob = AppIconCache.loadIconBitmapAsync(
-                    context, info, HPackages.myUserId, this, HailData.grayscaleIcon && frozen
+                    context, info, userId, this, HailData.grayscaleIcon && frozen
                 )
             }
             binding.appName.apply {
                 val name = info.loadLabel(context.packageManager)
                 text = if (!HailData.grayscaleIcon && frozen) "❄️$name" else name
                 isEnabled = !HailData.grayscaleIcon || !frozen
-                if (HPackages.isAppUninstalled(pkg)) setTextColor(
+                if (info.flags and ApplicationInfo.FLAG_INSTALLED == 0) setTextColor(
                     MaterialColors.getColor(
                         this, androidx.appcompat.R.attr.colorError
                     )
@@ -86,10 +98,10 @@ class AppsAdapter : ListAdapter<ApplicationInfo, AppsAdapter.ViewHolder>(DIFF) {
                 else setTextAppearance(com.google.android.material.R.style.TextAppearance_Material3_BodyMedium)
             }
             binding.appDesc.apply {
-                text = pkg
+                text = context.getString(R.string.app_package_user, pkg, userId)
                 isEnabled = !HailData.grayscaleIcon || !frozen
             }
-            binding.appStar.isChecked = HailData.isChecked(pkg)
+            binding.appStar.isChecked = HailData.isChecked(pkg, userId)
             updating = false
         }
     }
@@ -99,6 +111,6 @@ class AppsAdapter : ListAdapter<ApplicationInfo, AppsAdapter.ViewHolder>(DIFF) {
     }
 
     interface OnItemCheckedChangeListener {
-        fun onItemCheckedChange(buttonView: CompoundButton, isChecked: Boolean, packageName: String)
+        fun onItemCheckedChange(buttonView: CompoundButton, isChecked: Boolean, packageName: String, userId: Int)
     }
 }

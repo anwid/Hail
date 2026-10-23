@@ -1,0 +1,8 @@
+<resources>
+    <string name="action_home_sort">排序</string>
+    <string name="action_sort_done">完成</string>
+    <string name="home_sort_title">应用排序</string>
+    <string name="home_sort_hint">长按应用并拖动排序，完成后点击“完成”。</string>
+    <string name="action_edit_current_tag">编辑当前标签</string>
+    <string name="tag_drag_hint">长按并左右拖动可调整标签顺序</string>
+</resources>

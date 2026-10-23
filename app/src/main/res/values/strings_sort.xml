@@ -1,0 +1,8 @@
+<resources>
+    <string name="action_home_sort">Sort</string>
+    <string name="action_sort_done">Done</string>
+    <string name="home_sort_title">Sort apps</string>
+    <string name="home_sort_hint">Hold an app and drag to reorder. Tap Done when finished.</string>
+    <string name="action_edit_current_tag">Edit current tag</string>
+    <string name="tag_drag_hint">Hold and drag left or right to reorder</string>
+</resources>
