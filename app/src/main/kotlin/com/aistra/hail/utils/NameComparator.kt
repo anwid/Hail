@@ -9,8 +9,8 @@ object NameComparator : Comparator<Any> {
     private val c = Collator.getInstance()
     override fun compare(a: Any, b: Any): Int = when {
         a is ApplicationInfo && b is ApplicationInfo -> c.compare(
-            a.loadLabel(app.packageManager),
-            b.loadLabel(app.packageManager)
+            AppLabelCache.getOrLoad(app.packageManager, a),
+            AppLabelCache.getOrLoad(app.packageManager, b)
         )
         a is AppInfo && b is AppInfo -> when {
             a.pinned && !b.pinned -> -1

@@ -12,6 +12,7 @@ import com.aistra.hail.R
 import com.aistra.hail.app.HailData
 import com.aistra.hail.databinding.ItemAppsBinding
 import com.aistra.hail.utils.AppIconCache
+import com.aistra.hail.utils.AppLabelCache
 import com.aistra.hail.utils.HPackages
 import com.google.android.material.color.MaterialColors
 import kotlinx.coroutines.Job
@@ -87,7 +88,7 @@ class AppsAdapter : ListAdapter<ApplicationInfo, AppsAdapter.ViewHolder>(DIFF) {
                 )
             }
             binding.appName.apply {
-                val name = info.loadLabel(context.packageManager)
+                val name = AppLabelCache.getOrLoad(context.packageManager, info)
                 text = if (!HailData.grayscaleIcon && frozen) "❄️$name" else name
                 isEnabled = !HailData.grayscaleIcon || !frozen
                 if (info.flags and ApplicationInfo.FLAG_INSTALLED == 0) setTextColor(

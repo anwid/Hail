@@ -58,6 +58,7 @@ class AppsViewModel(application: Application) : AndroidViewModel(application) {
     fun updateAppList() {
         viewModelScope.launch {
             postRefreshState(true)
+            AppLabelCache.clear()
             val installed = withContext(Dispatchers.IO) { HPackages.getApplicationsAcrossUsers() }
             apps.postValue(installed)
         }
@@ -89,19 +90,22 @@ class AppsViewModel(application: Application) : AndroidViewModel(application) {
         query: String?
     ): List<ApplicationInfo> {
         val pm = getApplication<HailApp>().packageManager
+        val trimmedQuery = query?.trim()
+        val hasQuery = !trimmedQuery.isNullOrEmpty()
+
+        val checkUserApps = HailData.filterUserApps
+        val checkSystemApps = HailData.filterSystemApps
+        val bypassTypeFilter = checkUserApps && checkSystemApps
+
+        val checkFrozen = HailData.filterFrozenApps
+        val checkUnfrozen = HailData.filterUnfrozenApps
+        val bypassFrozenFilter = checkFrozen && checkUnfrozen
+
         return withContext(Dispatchers.Default) {
             return@withContext appList.filter {
-                ((HailData.filterUserApps && !it.isSystemApp)
-                        || (HailData.filterSystemApps && it.isSystemApp))
-
-                        && ((HailData.filterFrozenApps && it.isAppFrozen)
-                        || (HailData.filterUnfrozenApps && !it.isAppFrozen))
-                        // Search apps
-                        && ((HailData.nineKeySearch
-                        && (NineKeySearch.search(query, it.packageName, it.loadLabel(pm).toString())))
-                        || FuzzySearch.search(it.packageName, query)
-                        || FuzzySearch.search(it.loadLabel(pm).toString(), query)
-                        || PinyinSearch.searchPinyinAll(it.loadLabel(pm).toString(), query))
+                (bypassTypeFilter || (checkUserApps && !it.isSystemApp) || (checkSystemApps && it.isSystemApp))
+                        && (bypassFrozenFilter || (checkFrozen && it.isAppFrozen) || (checkUnfrozen && !it.isAppFrozen))
+                        && (!hasQuery || searchApp(it, trimmedQuery, pm))
             }.run {
                 when (HailData.sortBy) {
                     HailData.SORT_INSTALL -> sortedBy {
@@ -117,5 +121,14 @@ class AppsViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
         }
+    }
+
+    private fun searchApp(info: ApplicationInfo, query: String, pm: android.content.pm.PackageManager): Boolean {
+        val label = AppLabelCache.getOrLoad(pm, info)
+        val pkg = info.packageName
+        return (HailData.nineKeySearch && NineKeySearch.search(query, pkg, label))
+                || FuzzySearch.search(pkg, query)
+                || FuzzySearch.search(label, query)
+                || PinyinSearch.searchPinyinAll(label, query)
     }
 }

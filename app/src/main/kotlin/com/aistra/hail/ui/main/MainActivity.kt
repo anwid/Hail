@@ -106,9 +106,6 @@ class MainActivity : AppCompatActivity(), NavController.OnDestinationChangedList
 
         when (currentDestinationId) {
             R.id.nav_settings -> {
-                val hasTerminal = HailData.workingMode.startsWith(HailData.SU) ||
-                        HailData.workingMode.startsWith(HailData.SHIZUKU)
-                menu.findItem(R.id.action_terminal)?.isVisible = hasTerminal
                 menu.findItem(R.id.action_remove_owner)?.isVisible = HPolicy.isDeviceOwnerActive
             }
             R.id.nav_apps -> {

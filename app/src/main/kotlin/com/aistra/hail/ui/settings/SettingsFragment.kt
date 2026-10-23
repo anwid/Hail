@@ -828,20 +828,14 @@ class SettingsFragment : MainFragment(), ActivityMenuHandler {
 
     override fun onMenuItemClick(item: MenuItem): Boolean {
         when (item.itemId) {
-            R.id.action_terminal -> showTerminalDialog()
             R.id.action_remove_owner -> (requireActivity() as MainActivity).ownerRemoveDialog()
-            R.id.action_help -> HUI.openLink(HailData.URL_README)
             else -> return false
         }
         return true
     }
 
     override fun onPrepareMenu(menu: Menu) {
-        if (HailData.workingMode.startsWith(HailData.SU) || HailData.workingMode.startsWith(
-                HailData.SHIZUKU
-            )
-        ) menu.findItem(R.id.action_terminal)?.isVisible = true
-        else if (HPolicy.isDeviceOwnerActive) menu.findItem(R.id.action_remove_owner)?.isVisible = true
+        if (HPolicy.isDeviceOwnerActive) menu.findItem(R.id.action_remove_owner)?.isVisible = true
     }
 
     override fun onResume() {
