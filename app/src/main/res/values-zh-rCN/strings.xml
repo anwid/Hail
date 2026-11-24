@@ -168,4 +168,9 @@
     <string name="state_uninstalled">已卸载</string>
     <string name="donate_kofi">Ko-fi</string>
     <string name="mode_jailbreak_disable">越狱 - 停用</string>
+    <string name="swap_freeze_gestures">交换单击与长按的冻结范围</string>
+    <string name="freeze_gestures_default">单击：全部标签页 · 长按：当前标签页</string>
+    <string name="freeze_gestures_swapped">单击：当前标签页 · 长按：全部标签页</string>
+    <string name="msg_freeze_all_tabs">已冻结所有标签页中的 %1$s 个应用</string>
+    <string name="msg_freeze_current_tab">已冻结「%1$s」中的 %2$s 个应用</string>
 </resources>

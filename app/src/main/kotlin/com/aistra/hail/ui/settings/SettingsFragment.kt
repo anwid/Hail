@@ -177,6 +177,18 @@ class SettingsFragment : MainFragment(), ActivityMenuHandler {
                 titleId = R.string.nine_key,
                 icon = Icons.Outlined.Dialpad
             )
+            item(key = HailData.SWAP_FREEZE_GESTURES) {
+                val swapped = rememberPreferenceState(HailData.SWAP_FREEZE_GESTURES, false)
+                SwitchPreference(
+                    value = swapped.value,
+                    onValueChange = { swapped.value = it },
+                    title = { Text(stringResource(R.string.swap_freeze_gestures)) },
+                    summary = {
+                        Text(stringResource(if (swapped.value) R.string.freeze_gestures_swapped else R.string.freeze_gestures_default))
+                    },
+                    icon = { Icon(Icons.Outlined.SwapHoriz, contentDescription = null) },
+                )
+            }
             listPreference(
                 key = HailData.TILE_ACTION,
                 defaultValue = HailData.tileAction,

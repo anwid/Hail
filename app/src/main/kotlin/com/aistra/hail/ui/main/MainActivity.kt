@@ -36,9 +36,11 @@ class MainActivity : AppCompatActivity(), NavController.OnDestinationChangedList
     lateinit var progressBar: com.google.android.material.progressindicator.LinearProgressIndicator
     private var isScanning = false
     var currentDestinationId = R.id.nav_home
+    var selectedHomeTagId = 0
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        selectedHomeTagId = savedInstanceState?.getInt("selected_home_tag_id") ?: 0
         WindowCompat.setDecorFitsSystemWindows(window, false)
         val binding = initView()
         if (!HailData.biometricLogin || BiometricManager.from(this)
@@ -64,6 +66,11 @@ class MainActivity : AppCompatActivity(), NavController.OnDestinationChangedList
             .setSubtitle(getString(R.string.msg_biometric)).setAllowedAuthenticators(BIOMETRIC_STRONG or DEVICE_CREDENTIAL)
             .build()
         biometricPrompt.authenticate(promptInfo)
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putInt("selected_home_tag_id", selectedHomeTagId)
+        super.onSaveInstanceState(outState)
     }
 
     private fun initView() = ActivityMainBinding.inflate(layoutInflater).apply {

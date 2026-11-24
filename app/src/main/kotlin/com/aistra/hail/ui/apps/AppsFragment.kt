@@ -204,8 +204,14 @@ class AppsFragment : MainFragment(), AppsAdapter.OnItemClickListener, AppsAdapte
     override fun onItemCheckedChange(
         buttonView: CompoundButton, isChecked: Boolean, packageName: String, userId: Int
     ) {
-        if (isChecked) HailData.addCheckedApp(packageName, userId = userId)
-        else HailData.removeCheckedApp(packageName, userId = userId)
+        if (isChecked) {
+            val tags = HailData.tags
+            val targetTagId = tags.firstOrNull { it.id == activity.selectedHomeTagId }?.id
+                ?: tags.firstOrNull()?.id ?: 0
+            HailData.addCheckedApp(packageName, tagId = targetTagId, userId = userId)
+        } else {
+            HailData.removeCheckedApp(packageName, userId = userId)
+        }
         buttonView.isChecked = HailData.isChecked(packageName, userId)
     }
 

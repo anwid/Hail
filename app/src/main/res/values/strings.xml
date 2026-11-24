@@ -170,4 +170,9 @@
     <string name="state_suspended">Suspended</string>
     <string name="state_uninstalled">Uninstalled</string>
     <string name="mode_jailbreak_disable">Jailbreak - Disable</string>
+    <string name="swap_freeze_gestures">Swap freeze button gestures</string>
+    <string name="freeze_gestures_default">Tap: all tabs · Hold: current tab</string>
+    <string name="freeze_gestures_swapped">Tap: current tab · Hold: all tabs</string>
+    <string name="msg_freeze_all_tabs">Froze %1$s apps across all tabs</string>
+    <string name="msg_freeze_current_tab">Froze %2$s apps in “%1$s”</string>
 </resources>
