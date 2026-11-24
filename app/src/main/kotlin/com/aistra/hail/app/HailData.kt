@@ -104,6 +104,7 @@ object HailData {
     const val HOME_FONT_SIZE = "home_font_size_f"
     const val FUZZY_SEARCH = "fuzzy_search"
     const val NINE_KEY_SEARCH = "nine_key"
+    const val SWAP_FREEZE_GESTURES = "swap_freeze_gestures"
     const val TILE_ACTION = "tile_action"
     const val ACTION_NONE = "none"
     const val ACTION_FREEZE_ALL = "freeze_all"
@@ -151,6 +152,7 @@ object HailData {
     val homeFontSize get() = sp.getFloat(HOME_FONT_SIZE, 14f)
     val fuzzySearch get() = sp.getBoolean(FUZZY_SEARCH, false)
     val nineKeySearch get() = sp.getBoolean(NINE_KEY_SEARCH, false)
+    val swapFreezeGestures get() = sp.getBoolean(SWAP_FREEZE_GESTURES, false)
     val tileAction get() = sp.getString(TILE_ACTION, AUTO_FREEZE_AFTER_LOCK)!!
     var autoFreezeAfterLock
         get() = sp.getBoolean(AUTO_FREEZE_AFTER_LOCK, false)

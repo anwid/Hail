@@ -39,7 +39,7 @@ object AppManager {
         }
     }
 
-    fun setListFrozen(frozen: Boolean, vararg appInfo: AppInfo): String? {
+    fun setListFrozen(frozen: Boolean, vararg appInfo: AppInfo, showSingleAppName: Boolean = true): String? {
         val excludeMe = appInfo.filter { it.packageName != BuildConfig.APPLICATION_ID }
         var i = 0
         var denied = false
@@ -55,7 +55,7 @@ object AppManager {
                 it.applicationInfo != null || it.userId != HPackages.myUserId -> denied = true
             }
         }
-        return if (denied && i == 0) null else if (i == 1) name else i.toString()
+        return if (denied && i == 0) null else if (showSingleAppName && i == 1) name else i.toString()
     }
 
     fun setAppFrozen(

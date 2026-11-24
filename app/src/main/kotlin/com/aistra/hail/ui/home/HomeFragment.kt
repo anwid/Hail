@@ -113,6 +113,9 @@ class HomeFragment : MainFragment(), ActivityMenuHandler {
         binding.pager.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
             override fun onPageSelected(position: Int) {
                 super.onPageSelected(position)
+                if (activity.currentDestinationId == R.id.nav_home) {
+                    tags.getOrNull(position)?.let { activity.selectedHomeTagId = it.id }
+                }
                 binding.pager.post {
                     if (isResumed && activity.currentDestinationId == R.id.nav_home) {
                         val menu = activity.toolbar.menu
@@ -150,9 +153,21 @@ class HomeFragment : MainFragment(), ActivityMenuHandler {
     override fun onResume() {
         super.onResume()
         if (activity.currentDestinationId == R.id.nav_home) {
+            tags.getOrNull(binding.pager.currentItem)?.let { activity.selectedHomeTagId = it.id }
             val menu = activity.toolbar.menu
             onSetupMenu(menu)
             onPrepareMenu(menu)
+        }
+    }
+
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+        activity.fab.setOnClickListener {
+            getCurrentPagerFragment()?.freezeFromButton(allTags = !HailData.swapFreezeGestures)
+        }
+        activity.fab.setOnLongClickListener {
+            getCurrentPagerFragment()?.freezeFromButton(allTags = HailData.swapFreezeGestures)
+            true
         }
     }
 
@@ -416,6 +431,8 @@ class HomeFragment : MainFragment(), ActivityMenuHandler {
     }
 
     override fun onDestroyView() {
+        activity.fab.setOnClickListener(null)
+        activity.fab.setOnLongClickListener(null)
         multiselect = false
         selectedList.clear()
         binding.tabs.removeCallbacks(tabAutoScrollRunnable)

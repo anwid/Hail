@@ -174,13 +174,6 @@ class PagerFragment : MainFragment(), PagerAdapter.OnItemClickListener, PagerAda
             setupMenu(menu)
             prepareMenu(menu)
         }
-        activity.fab.setOnClickListener {
-            setListFrozen(true, pagerAdapter.currentList.filterNot { it.whitelisted })
-        }
-        activity.fab.setOnLongClickListener {
-            setListFrozen(true)
-            true
-        }
     }
 
     override fun onPause() {
@@ -478,8 +471,21 @@ class PagerFragment : MainFragment(), PagerAdapter.OnItemClickListener, PagerAda
         } else HUI.showToast(R.string.activity_not_found)
     }
 
+    fun freezeFromButton(allTags: Boolean) {
+        if (allTags) {
+            setListFrozen(true, resultMessage = { getString(R.string.msg_freeze_all_tabs, it) })
+        } else {
+            val currentTag = tag ?: return
+            val apps = HailData.checkedList.filter { currentTag.id in it.tagIdList && !it.whitelisted }
+            setListFrozen(true, apps, resultMessage = { getString(R.string.msg_freeze_current_tab, currentTag.first, it) })
+        }
+    }
+
     private fun setListFrozen(
-        frozen: Boolean, list: List<AppInfo> = HailData.checkedList, updateList: Boolean = true
+        frozen: Boolean,
+        list: List<AppInfo> = HailData.checkedList,
+        updateList: Boolean = true,
+        resultMessage: ((String) -> String)? = null,
     ) {
         val currentTagMode = HailData.getWorkingModeForTag(tagId)
         val modesToCheck = if (list === HailData.checkedList) {
@@ -501,16 +507,16 @@ class PagerFragment : MainFragment(), PagerAdapter.OnItemClickListener, PagerAda
                 }
             }
         }
-        val filtered = list.filter {
+        val candidates = if (resultMessage == null) list else list.distinctBy { it.packageName to it.userId }
+        val filtered = candidates.filter {
             AppManager.isAppFrozen(it.packageName, it.userId, HailData.getWorkingModeForApp(it)) != frozen
         }
-        when (val result = AppManager.setListFrozen(frozen, *filtered.toTypedArray())) {
+        when (val result = AppManager.setListFrozen(frozen, *filtered.toTypedArray(), showSingleAppName = resultMessage == null)) {
             null -> HUI.showToast(R.string.permission_denied)
             else -> {
                 if (updateList) updateCurrentList()
-                HUI.showToast(
-                    if (frozen) R.string.msg_freeze else R.string.msg_unfreeze, result
-                )
+                if (resultMessage != null) HUI.showToast(resultMessage(result))
+                else HUI.showToast(if (frozen) R.string.msg_freeze else R.string.msg_unfreeze, result)
             }
         }
     }
@@ -791,8 +797,6 @@ class PagerFragment : MainFragment(), PagerAdapter.OnItemClickListener, PagerAda
         touchHelper?.attachToRecyclerView(null)
         touchHelper = null
         sortingBackCallback.isEnabled = false
-        activity.fab.setOnClickListener(null)
-        activity.fab.setOnLongClickListener(null)
         pagerAdapter.onDestroy()
         super.onDestroyView()
         _binding = null
