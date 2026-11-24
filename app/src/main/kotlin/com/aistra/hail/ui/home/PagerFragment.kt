@@ -151,6 +151,7 @@ class PagerFragment : MainFragment(), PagerAdapter.OnItemClickListener, PagerAda
         }
 
         binding.refresh.apply {
+            applyMaterialTheme()
             setOnRefreshListener {
                 updateCurrentList()
                 binding.refresh.isRefreshing = false
@@ -214,7 +215,7 @@ class PagerFragment : MainFragment(), PagerAdapter.OnItemClickListener, PagerAda
     }
 
     private fun updateCurrentList() = HailData.checkedList.filter {
-        if (query.isEmpty()) tag?.second?.let { tagId -> tagId in it.tagIdList } ?: false
+        if (query.isEmpty()) it.tagId == tagId
         else ((HailData.nineKeySearch && NineKeySearch.search(
             query, it.packageName, it.name.toString()
         )) || FuzzySearch.search(it.packageName, query) || FuzzySearch.search(
@@ -260,7 +261,7 @@ class PagerFragment : MainFragment(), PagerAdapter.OnItemClickListener, PagerAda
             return true
         }
         val pkg = info.packageName
-        val frozen = AppManager.isAppFrozen(pkg, info.userId)
+        val frozen = AppManager.isAppFrozen(info)
         val action = getString(if (frozen) R.string.action_unfreeze else R.string.action_freeze)
         val actions = mutableListOf(
             R.string.action_launch,
@@ -344,7 +345,7 @@ class PagerFragment : MainFragment(), PagerAdapter.OnItemClickListener, PagerAda
                 R.string.action_remove_home -> removeCheckedApp(info)
                 R.string.action_unfreeze_remove_home -> {
                     setListFrozen(false, listOf(info), false)
-                    if (!AppManager.isAppFrozen(pkg, info.userId)) removeCheckedApp(info)
+                    if (!AppManager.isAppFrozen(info)) removeCheckedApp(info)
                 }
                 R.string.action_home_sort -> setSorting(true)
             }
@@ -354,8 +355,40 @@ class PagerFragment : MainFragment(), PagerAdapter.OnItemClickListener, PagerAda
         return true
     }
 
+    private fun migrateAppTag(info: AppInfo, newTagId: Int) {
+        val oldTagId = info.tagId
+        if (oldTagId == newTagId) return
+        val oldMode = HailData.getWorkingModeForTag(oldTagId)
+        val newMode = HailData.getWorkingModeForTag(newTagId)
+        if (AppManager.isAppFrozen(info) && oldMode != newMode) {
+            val currentFrozenMode = info.frozenMode ?: oldMode
+            AppManager.executeSetAppFrozen(info.packageName, false, info.userId, currentFrozenMode)
+            val ok = AppManager.executeSetAppFrozen(info.packageName, true, info.userId, newMode)
+            info.frozenMode = if (ok) newMode else null
+        }
+        info.tagId = newTagId
+    }
+
+    private fun migrateTagMode(tagId: Int, newMode: String) {
+        val oldEffective = HailData.getWorkingModeForTag(tagId)
+        val newEffective = if (newMode == HailData.MODE_DEFAULT || newMode.isEmpty()) HailData.workingMode else newMode
+        if (oldEffective != newEffective) {
+            val appsInTag = HailData.checkedList.filter { it.tagId == tagId }
+            appsInTag.forEach { info ->
+                if (AppManager.isAppFrozen(info)) {
+                    val currentFrozenMode = info.frozenMode ?: oldEffective
+                    if (currentFrozenMode != newEffective) {
+                        AppManager.executeSetAppFrozen(info.packageName, false, info.userId, currentFrozenMode)
+                        val ok = AppManager.executeSetAppFrozen(info.packageName, true, info.userId, newEffective)
+                        info.frozenMode = if (ok) newEffective else null
+                    }
+                }
+            }
+        }
+    }
+
     private fun tagDialog(info: AppInfo) {
-        val currentTagId = info.tagIdList.firstOrNull() ?: 0
+        val currentTagId = info.tagId
         var selectedIndex = HailData.tags.indexOfFirst { it.id == currentTagId }.coerceAtLeast(0)
         MaterialAlertDialogBuilder(activity).setTitle(R.string.action_tag_set)
             .setSingleChoiceItems(
@@ -365,8 +398,7 @@ class PagerFragment : MainFragment(), PagerAdapter.OnItemClickListener, PagerAda
             }.setPositiveButton(android.R.string.ok) { _, _ ->
                 if (selectedIndex in HailData.tags.indices) {
                     val newTagId = HailData.tags[selectedIndex].id
-                    info.tagIdList.clear()
-                    info.tagIdList.add(newTagId)
+                    migrateAppTag(info, newTagId)
                     HailData.saveApps()
                     updateCurrentList()
                     (parentFragment as? HomeFragment)?.refreshTags(tagId)
@@ -386,10 +418,7 @@ class PagerFragment : MainFragment(), PagerAdapter.OnItemClickListener, PagerAda
             }.setPositiveButton(android.R.string.ok) { _, _ ->
                 if (selectedIndex in HailData.tags.indices) {
                     val targetTagId = HailData.tags[selectedIndex].id
-                    selectedList.forEach {
-                        it.tagIdList.clear()
-                        it.tagIdList.add(targetTagId)
-                    }
+                    selectedList.forEach { migrateAppTag(it, targetTagId) }
                     HailData.saveApps()
                     deselect()
                     (parentFragment as? HomeFragment)?.refreshTags(tagId)
@@ -448,7 +477,7 @@ class PagerFragment : MainFragment(), PagerAdapter.OnItemClickListener, PagerAda
                 5 -> {
                     setListFrozen(false, selectedList, false)
                     selectedList.forEach {
-                        if (!AppManager.isAppFrozen(it.packageName, it.userId, HailData.getWorkingModeForApp(it))) removeCheckedApp(it, false)
+                        if (!AppManager.isAppFrozen(it)) removeCheckedApp(it, false)
                     }
                     HailData.saveApps()
                     deselect()
@@ -465,11 +494,12 @@ class PagerFragment : MainFragment(), PagerAdapter.OnItemClickListener, PagerAda
     }
 
     private fun launchApp(info: AppInfo) {
-        val mode = HailData.getWorkingModeForApp(info)
-        if (AppManager.isAppFrozen(info.packageName, info.userId, mode) &&
-            AppManager.setAppFrozen(info.packageName, false, info.userId, mode)) {
+        if (AppManager.isAppFrozen(info) &&
+            AppManager.setAppFrozen(info, false)) {
+            HailData.saveApps()
             updateCurrentList()
         }
+        val mode = HailData.getWorkingModeForApp(info)
         if (info.userId == HPackages.myUserId && mode == HailData.MODE_ISLAND_HIDE) {
             HIsland.ensureLaunchIntentExists(info.packageName)
         }
@@ -481,11 +511,10 @@ class PagerFragment : MainFragment(), PagerAdapter.OnItemClickListener, PagerAda
     private fun setListFrozen(
         frozen: Boolean, list: List<AppInfo> = HailData.checkedList, updateList: Boolean = true
     ) {
-        val currentTagMode = HailData.getWorkingModeForTag(tagId)
         val modesToCheck = if (list === HailData.checkedList) {
-            (HailData.tags.map { HailData.getWorkingModeForTag(it.id) } + currentTagMode).distinct()
+            HailData.tags.map { HailData.getWorkingModeForTag(it.id) }.distinct()
         } else {
-            listOf(currentTagMode)
+            listOf(HailData.getWorkingModeForTag(tagId))
         }
         if (modesToCheck.all { it == HailData.MODE_DEFAULT }) {
             MaterialAlertDialogBuilder(activity).setMessage(R.string.msg_guide)
@@ -501,10 +530,7 @@ class PagerFragment : MainFragment(), PagerAdapter.OnItemClickListener, PagerAda
                 }
             }
         }
-        val filtered = list.filter {
-            AppManager.isAppFrozen(it.packageName, it.userId, HailData.getWorkingModeForApp(it)) != frozen
-        }
-        when (val result = AppManager.setListFrozen(frozen, *filtered.toTypedArray())) {
+        when (val result = AppManager.setListFrozen(frozen, *list.toTypedArray())) {
             null -> HUI.showToast(R.string.permission_denied)
             else -> {
                 if (updateList) updateCurrentList()
@@ -569,10 +595,7 @@ class PagerFragment : MainFragment(), PagerAdapter.OnItemClickListener, PagerAda
                     var newTagId = tagName.hashCode()
                     while (HailData.tags.any { it.id == newTagId }) newTagId++
                     HailData.tags.add(TagInfo(tagName, newTagId, chosenMode))
-                    list.forEach {
-                        it.tagIdList.clear()
-                        it.tagIdList.add(newTagId)
-                    }
+                    list.forEach { migrateAppTag(it, newTagId) }
                     HailData.saveApps()
                     HailData.saveTags()
                     home.refreshTags(tagId)
@@ -583,8 +606,12 @@ class PagerFragment : MainFragment(), PagerAdapter.OnItemClickListener, PagerAda
                     if (position < 0) return@setPositiveButton
                     if (HailData.tags.any { it.name == tagName && it.id != tagId }) return@setPositiveButton
                     HailData.tags[position].name = tagName
-                    HailData.tags[position].workingMode = chosenMode
+                    if (HailData.tags[position].workingMode != chosenMode) {
+                        migrateTagMode(tagId, chosenMode)
+                        HailData.tags[position].workingMode = chosenMode
+                    }
                     HailData.saveTags()
+                    HailData.saveApps()
                     home.refreshTags(tagId)
                     tabLayout.isVisible = query.isEmpty() && HailData.tags.size > 1
                     updateCurrentList()
@@ -596,7 +623,10 @@ class PagerFragment : MainFragment(), PagerAdapter.OnItemClickListener, PagerAda
                 if (list != null || tagId == 0) return@apply
                 setNeutralButton(R.string.action_tag_remove) { _, _ ->
                     HailData.checkedList.toList().forEach {
-                        if (it.tagIdList.remove(tagId) && it.tagIdList.isEmpty()) {
+                        if (it.tagId == tagId) {
+                            if (AppManager.isAppFrozen(it)) {
+                                AppManager.setAppFrozen(it, false)
+                            }
                             removeCheckedApp(it, false)
                         }
                     }

@@ -333,6 +333,7 @@ class SettingsFragment : MainFragment(), ActivityMenuHandler {
                         put("whitelisted", appInfo.whitelisted)
                         put("tagId", appInfo.tagId)
                         put("tags", JSONArray().put(appInfo.tagId))
+                        put(HailData.KEY_FROZEN_MODE, appInfo.frozenMode ?: "")
                     })
                 }
                 put("apps", appsArray)
@@ -455,13 +456,15 @@ class SettingsFragment : MainFragment(), ActivityMenuHandler {
                         } else {
                             appObj.optInt(HailData.KEY_TAG, 0)
                         }
+                        val frozenMode = appObj.optString(HailData.KEY_FROZEN_MODE, "").takeIf { it.isNotEmpty() }
                         HailData.checkedList.add(
                             AppInfo(
                                 packageName = pkg,
                                 pinned = pinned,
                                 whitelisted = whitelisted,
-                                tagIdList = mutableListOf(tagId),
-                                userId = userId
+                                tagId = tagId,
+                                userId = userId,
+                                frozenMode = frozenMode
                             )
                         )
                     }
@@ -497,7 +500,7 @@ class SettingsFragment : MainFragment(), ActivityMenuHandler {
                             packageName = pkg,
                             pinned = pinned,
                             whitelisted = whitelisted,
-                            tagIdList = mutableListOf(tagId),
+                            tagId = tagId,
                             userId = userId
                         )
                     )

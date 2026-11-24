@@ -55,11 +55,11 @@ class ApiActivity : ComponentActivity() {
             HailApi.ACTION_FREEZE -> setAppFrozen(requirePackage, true)
             HailApi.ACTION_UNFREEZE -> setAppFrozen(requirePackage, false)
             HailApi.ACTION_FREEZE_TAG -> setListFrozen(
-                true, HailData.checkedList.filter { requireTagId in it.tagIdList }, true
+                true, HailData.checkedList.filter { requireTagId == it.tagId }, true
             )
 
             HailApi.ACTION_UNFREEZE_TAG -> setListFrozen(
-                false, HailData.checkedList.filter { requireTagId in it.tagIdList })
+                false, HailData.checkedList.filter { requireTagId == it.tagId })
 
             HailApi.ACTION_FREEZE_ALL -> setListFrozen(true)
             HailApi.ACTION_UNFREEZE_ALL -> setListFrozen(false)
@@ -199,7 +199,7 @@ class ApiActivity : ComponentActivity() {
         } ?: throw IllegalArgumentException("Tag must not be null")
 
     private fun launchApp(pkg: String, tagId: Int? = null) {
-        if (tagId != null) setListFrozen(false, HailData.checkedList.filter { tagId in it.tagIdList })
+        if (tagId != null) setListFrozen(false, HailData.checkedList.filter { tagId == it.tagId })
         if (AppManager.isAppFrozen(pkg, targetUserId) && AppManager.setAppFrozen(pkg, false, targetUserId)) {
             app.setAutoFreezeService()
         }
@@ -229,7 +229,11 @@ class ApiActivity : ComponentActivity() {
         frozen: Boolean, list: List<AppInfo> = HailData.checkedList, skipWhitelisted: Boolean = false
     ) {
         val filtered =
-            list.filter { AppManager.isAppFrozen(it.packageName, it.userId) != frozen && !(skipWhitelisted && it.whitelisted) }
+            list.filter {
+                !(skipWhitelisted && it.whitelisted) &&
+                    (if (frozen) (!AppManager.isAppFrozen(it) || (it.frozenMode != null && it.frozenMode != HailData.getWorkingModeForApp(it)))
+                    else AppManager.isAppFrozen(it))
+            }
         when (val result = AppManager.setListFrozen(frozen, *filtered.toTypedArray())) {
             null -> throw IllegalStateException(getString(R.string.permission_denied))
             else -> {

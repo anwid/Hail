@@ -8,7 +8,8 @@ import android.widget.EditText
 import androidx.activity.result.contract.ActivityResultContracts.CreateDocument
 import androidx.appcompat.widget.SearchView
 import com.aistra.hail.ui.main.ActivityMenuHandler
-import androidx.fragment.app.viewModels
+import com.aistra.hail.ui.main.MainActivity
+import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.GridLayoutManager
@@ -34,7 +35,7 @@ import java.io.FileInputStream
 class AppsFragment : MainFragment(), AppsAdapter.OnItemClickListener, AppsAdapter.OnItemCheckedChangeListener,
     ActivityMenuHandler {
 
-    private val model: AppsViewModel by viewModels()
+    private val model: AppsViewModel by activityViewModels()
 
     private var _binding: FragmentAppsBinding? = null
     private val binding get() = _binding!!
@@ -85,7 +86,11 @@ class AppsFragment : MainFragment(), AppsAdapter.OnItemClickListener, AppsAdapte
             onItemCheckedChangeListener = this@AppsFragment
         }
         binding.refresh.apply {
-            setOnRefreshListener { updateAppList() }
+            applyMaterialTheme()
+            setOnRefreshListener {
+                isRefreshing = false
+                updateAppList()
+            }
             applyDefaultInsetter { marginRelative(isRtl, start = !isLandscape, end = true) }
         }
         binding.recyclerView.apply {
@@ -95,13 +100,13 @@ class AppsFragment : MainFragment(), AppsAdapter.OnItemClickListener, AppsAdapte
             registerForContextMenu(this)
         }
 
-        model.isRefreshing.observe(viewLifecycleOwner) {
-            binding.refresh.isRefreshing = it
+        model.isScanning.observe(viewLifecycleOwner) { isScanning ->
+            activity.setScanningProgress(isScanning)
         }
         model.apps.apply {
             lastAppsHash = value.hashCode()
             observe(viewLifecycleOwner) {
-                if (isAppsChanged) updateDisplayAppList()
+                if (model.displayApps.value == null || isAppsChanged) updateDisplayAppList()
                 lastAppsHash = it.hashCode()
             }
         }
@@ -115,6 +120,8 @@ class AppsFragment : MainFragment(), AppsAdapter.OnItemClickListener, AppsAdapte
         model.displayApps.observe(viewLifecycleOwner) {
             appsAdapter.submitList(it)
         }
+
+        model.ensureLoaded()
 
         return binding.root
     }
@@ -295,6 +302,7 @@ class AppsFragment : MainFragment(), AppsAdapter.OnItemClickListener, AppsAdapte
     private fun updateDisplayAppList() = model.updateDisplayAppList()
 
     override fun onDestroyView() {
+        activity.setScanningProgress(false)
         appsAdapter.onDestroy()
         super.onDestroyView()
         _binding = null

@@ -19,6 +19,14 @@ object AppLabelCache {
         return cache[key]
     }
 
+    fun put(packageName: String, userId: Int, label: String) {
+        cache[packageName + "_" + userId] = label
+    }
+
+    fun get(packageName: String, userId: Int): String? {
+        return cache[packageName + "_" + userId]
+    }
+
     fun clear() {
         cache.clear()
     }

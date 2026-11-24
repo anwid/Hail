@@ -8,25 +8,22 @@ class AppInfo(
     val packageName: String,
     var pinned: Boolean = false,
     var whitelisted: Boolean = false,
-    val tagIdList: MutableList<Int> = mutableListOf(0),
-    val userId: Int = HPackages.myUserId
+    var tagId: Int = 0,
+    val userId: Int = HPackages.myUserId,
+    var frozenMode: String? = null
 ) {
     enum class State { NOT_FOUND, UNFROZEN, FROZEN }
 
     val identity = AppIdentity(packageName, userId)
     val key: String get() = identity.key
-    var tagId: Int
-        get() = tagIdList.firstOrNull() ?: 0
-        set(value) {
-            tagIdList.clear()
-            tagIdList.add(value)
-        }
+    val tagIdList: MutableList<Int> get() = mutableListOf(tagId)
+
     val applicationInfo: ApplicationInfo? get() = HPackages.getApplicationInfoOrNull(packageName, userId = userId)
     val name get() = applicationInfo?.loadLabel(app.packageManager) ?: packageName
     val state
         get() = when {
             applicationInfo == null -> State.NOT_FOUND
-            AppManager.isAppFrozen(packageName, userId, HailData.getWorkingModeForApp(this)) -> State.FROZEN
+            AppManager.isAppFrozen(this) -> State.FROZEN
             else -> State.UNFROZEN
         }
 

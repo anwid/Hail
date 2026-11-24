@@ -33,6 +33,7 @@ object HailData {
     const val KEY_PACKAGE = "package"
     const val KEY_USER_ID = "userId"
     const val KEY_FROZEN = "frozen"
+    const val KEY_FROZEN_MODE = "frozen_mode"
     private const val SORT_BY = "sort_by"
     const val SORT_NAME = "name"
     const val SORT_INSTALL = "install"
@@ -168,8 +169,7 @@ object HailData {
     }
 
     fun getWorkingModeForApp(appInfo: AppInfo): String {
-        val tagId = appInfo.tagIdList.firstOrNull() ?: 0
-        return getWorkingModeForTag(tagId)
+        return getWorkingModeForTag(appInfo.tagId)
     }
 
     fun getWorkingModeForPackage(packageName: String, userId: Int = HPackages.myUserId): String {
@@ -192,18 +192,21 @@ object HailData {
                         if (item.has(KEY_USER_ID) && !item.isNull(KEY_USER_ID)) item.optInt(KEY_USER_ID, -1) else null,
                         HPackages.myUserId
                     ) ?: continue
-                    add(with(item) {
-                        val singleTagId = optJSONArray(KEY_TAGS)?.let {
-                            if (it.length() > 0) it.getInt(0) else 0
-                        } ?: optInt(KEY_TAG, 0)
+                    val singleTagId = if (item.has(KEY_TAG)) item.getInt(KEY_TAG)
+                    else item.optJSONArray(KEY_TAGS)?.let {
+                        if (it.length() > 0) it.getInt(0) else 0
+                    } ?: 0
+                    val frozenMode = item.optString(KEY_FROZEN_MODE, "").takeIf { it.isNotEmpty() }
+                    add(
                         AppInfo(
                             packageName = identity.packageName,
                             userId = identity.userId,
-                            pinned = optBoolean(KEY_PINNED),
-                            whitelisted = optBoolean(KEY_WHITELISTED),
-                            tagIdList = mutableListOf(singleTagId)
+                            pinned = item.optBoolean(KEY_PINNED),
+                            whitelisted = item.optBoolean(KEY_WHITELISTED),
+                            tagId = singleTagId,
+                            frozenMode = frozenMode
                         )
-                    })
+                    )
                 }
             }
         }
@@ -214,7 +217,7 @@ object HailData {
 
     fun addCheckedApp(packageName: String, tagId: Int = 0, saveApps: Boolean = true, userId: Int = HPackages.myUserId) {
         if (userId < 0 || isChecked(packageName, userId)) return
-        checkedList.add(AppInfo(packageName, tagIdList = mutableListOf(tagId), userId = userId))
+        checkedList.add(AppInfo(packageName, tagId = tagId, userId = userId))
         if (saveApps) saveApps()
     }
 
@@ -235,6 +238,7 @@ object HailData {
                         .put(KEY_WHITELISTED, it.whitelisted)
                         .put(KEY_TAG, it.tagId)
                         .put(KEY_TAGS, JSONArray().put(it.tagId))
+                        .put(KEY_FROZEN_MODE, it.frozenMode ?: "")
                 )
             }
             toString()

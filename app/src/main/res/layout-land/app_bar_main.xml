@@ -23,6 +23,16 @@
             android:background="@null"
             app:popupTheme="@style/Theme.Hail.PopupOverlay" />
 
+        <com.google.android.material.progressindicator.LinearProgressIndicator
+            android:id="@+id/progress_bar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:indeterminate="true"
+            android:visibility="gone"
+            app:indicatorColor="?attr/colorPrimary"
+            app:trackColor="@android:color/transparent"
+            app:trackThickness="2.5dp" />
+
     </com.google.android.material.appbar.AppBarLayout>
 
     <include

@@ -33,6 +33,8 @@ class MainActivity : AppCompatActivity(), NavController.OnDestinationChangedList
     lateinit var fab: ExtendedFloatingActionButton
     lateinit var appbar: AppBarLayout
     lateinit var toolbar: com.google.android.material.appbar.MaterialToolbar
+    lateinit var progressBar: com.google.android.material.progressindicator.LinearProgressIndicator
+    private var isScanning = false
     var currentDestinationId = R.id.nav_home
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -70,6 +72,7 @@ class MainActivity : AppCompatActivity(), NavController.OnDestinationChangedList
         fab = appBarMain.fab
         appbar = appBarMain.appBarLayout
         toolbar = appBarMain.toolbar
+        progressBar = appBarMain.progressBar
         toolbar.layoutTransition = null
         setSupportActionBar(toolbar)
 
@@ -153,6 +156,11 @@ class MainActivity : AppCompatActivity(), NavController.OnDestinationChangedList
         return primary as? ActivityMenuHandler
     }
 
+    fun setScanningProgress(scanning: Boolean) {
+        isScanning = scanning
+        progressBar.isVisible = scanning && currentDestinationId == R.id.nav_apps
+    }
+
     fun ownerRemoveDialog() {
         MaterialAlertDialogBuilder(this).setTitle(R.string.title_remove_owner).setMessage(R.string.msg_remove_owner)
             .setPositiveButton(R.string.action_continue) { _, _ ->
@@ -177,6 +185,11 @@ class MainActivity : AppCompatActivity(), NavController.OnDestinationChangedList
         if (currentDestinationId != destination.id) {
             currentDestinationId = destination.id
             invalidateOptionsMenu()
+        }
+        if (destination.id != R.id.nav_apps) {
+            progressBar.isVisible = false
+        } else {
+            progressBar.isVisible = isScanning
         }
     }
 }

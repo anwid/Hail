@@ -25,7 +25,13 @@ object HUserApps {
     fun getUserIds(): List<Int> {
         val frameworkProfiles = runCatching {
             (app.getSystemService(Context.USER_SERVICE) as? UserManager)?.userProfiles?.map { it.hashCode() }
-        }.getOrNull().orEmpty()
+        }.getOrNull().orEmpty().filter { it >= 0 }
+        if (frameworkProfiles.isNotEmpty() && frameworkProfiles.size == 1 && frameworkProfiles.contains(HPackages.myUserId)) {
+            return listOf(HPackages.myUserId)
+        }
+        if (frameworkProfiles.size > 1) {
+            return (listOf(HPackages.myUserId) + frameworkProfiles).distinct()
+        }
         val result = execute("pm list users")
         val pmUsers = if (result.first == 0) {
             Regex("UserInfo\\{(\\d+):").findAll(result.second.orEmpty()).mapNotNull { it.groupValues[1].toIntOrNull() }.toList()
@@ -107,12 +113,14 @@ object HUserApps {
     }
 
     fun getApplications(userIds: List<Int>): List<ApplicationInfo> {
+        val targetUsers = userIds.filter { it >= 0 && it != HPackages.myUserId }
+        if (targetUsers.isEmpty()) return emptyList()
         cache.clear()
         val dump = execute("dumpsys package")
         if (dump.first != 0) return emptyList()
         val states = parseStates(dump.second.orEmpty())
         val result = mutableListOf<ApplicationInfo>()
-        for (userId in userIds.filter { it >= 0 && it != HPackages.myUserId }) {
+        for (userId in targetUsers) {
             var listing = execute("pm list packages -f -U -u --user $userId")
             if (listing.first != 0) listing = execute("pm list packages -f -u --user $userId")
             if (listing.first != 0) continue
